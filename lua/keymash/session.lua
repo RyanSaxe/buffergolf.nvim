@@ -224,6 +224,21 @@ local function setup_autocmds(session)
     end,
   })
 
+  -- Also map <CR> to prevent real newline insertion in edge cases
+  local function handle_cr()
+    local win = session.practice_win
+    local row1, col0 = get_cursor(win)
+    local _, tag = expected_at(session, row1, col0)
+    if tag == 'nl' then
+      local nr, _ = advance_cursor(session, row1, col0)
+      set_cursor(win, nr, 0)
+    end
+  end
+  vim.keymap.set('i', '<CR>', function()
+    handle_cr()
+    return ''
+  end, { buffer = buf, nowait = true, silent = true, expr = true })
+
   -- Backspace: move left and clear mark at the previous position
   vim.keymap.set('i', '<BS>', function()
     local win = session.practice_win
@@ -245,7 +260,7 @@ function M.start(origin_bufnr, config)
   -- Create practice buffer
   local practice_buf = vim.api.nvim_create_buf(false, true) -- unlisted scratch
   vim.api.nvim_buf_set_name(practice_buf, "keymash://practice")
-  vim.api.nvim_set_option_value("buftype", "acwrite", { buf = practice_buf })
+  vim.api.nvim_set_option_value("buftype", "nofile", { buf = practice_buf })
   -- Inherit original filetype to preserve syntax colors
   local origin_ft = vim.api.nvim_get_option_value("filetype", { buf = origin_bufnr })
   vim.api.nvim_set_option_value("filetype", origin_ft ~= '' and origin_ft or 'keymash', { buf = practice_buf })
@@ -257,16 +272,43 @@ function M.start(origin_bufnr, config)
   -- Put expected text into practice buffer
   vim.api.nvim_buf_set_lines(practice_buf, 0, -1, true, expected_lines)
 
-  -- Show practice buffer in current window
-  local win = vim.api.nvim_get_current_win()
-  vim.api.nvim_win_set_buf(win, practice_buf)
+  -- Open a dimmed backdrop and a centered floating window for practice
+  local cols = vim.o.columns
+  local lines = vim.o.lines - vim.o.cmdheight
+
+  -- Backdrop
+  local back_buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_set_option_value('buftype', 'nofile', { buf = back_buf })
+  vim.api.nvim_set_option_value('bufhidden', 'wipe', { buf = back_buf })
+  vim.api.nvim_set_option_value('modifiable', false, { buf = back_buf })
+  local filler = {}
+  for _ = 1, lines do table.insert(filler, '') end
+  vim.api.nvim_buf_set_lines(back_buf, 0, -1, true, filler)
+  local back_win = vim.api.nvim_open_win(back_buf, false, {
+    relative = 'editor', width = cols, height = lines, row = 0, col = 0,
+    style = 'minimal', zindex = 50, focusable = false,
+  })
+  vim.api.nvim_set_option_value('winhl', 'Normal:KeymashBackdrop', { win = back_win })
+  vim.api.nvim_set_option_value('winblend', 40, { win = back_win })
+
+  -- Practice float
+  local width = math.max(20, math.floor(cols * 0.85))
+  local height = math.max(5, math.floor(lines * 0.85))
+  local row = math.floor((lines - height) / 2)
+  local col = math.floor((cols - width) / 2)
+  local win = vim.api.nvim_open_win(practice_buf, true, {
+    relative = 'editor', width = width, height = height, row = row, col = col,
+    style = 'minimal', border = 'rounded', zindex = 60,
+  })
 
   -- Set window-local options to reduce noise
   vim.api.nvim_set_option_value("number", false, { win = win })
   vim.api.nvim_set_option_value("relativenumber", false, { win = win })
   vim.api.nvim_set_option_value("list", false, { win = win })
   vim.api.nvim_set_option_value("signcolumn", "no", { win = win })
-  -- no float-specific win settings
+  vim.api.nvim_set_option_value('winblend', 0, { win = win })
+  vim.api.nvim_set_option_value("buflisted", false, { buf = practice_buf })
+  vim.api.nvim_set_option_value("modified", false, { buf = practice_buf })
 
   -- Namespaces
   local ns_dim = vim.api.nvim_create_namespace("KeymashDimNS")
@@ -276,6 +318,8 @@ function M.start(origin_bufnr, config)
     origin_buf = origin_bufnr,
     practice_buf = practice_buf,
     practice_win = win,
+    backdrop_buf = back_buf,
+    backdrop_win = back_win,
     expected_lines = expected_lines,
     ns_dim = ns_dim,
     ns_marks = ns_marks,
@@ -299,6 +343,12 @@ function M.stop(bufnr)
     return
   end
   local pbuf = session.practice_buf
+  if win_valid(session.backdrop_win) then
+    pcall(vim.api.nvim_win_close, session.backdrop_win, true)
+  end
+  if buf_valid(session.backdrop_buf) then
+    pcall(vim.api.nvim_buf_delete, session.backdrop_buf, { force = true })
+  end
   if win_valid(session.practice_win) then
     pcall(vim.api.nvim_win_close, session.practice_win, true)
   end

@@ -58,6 +58,11 @@ local function ensure_highlights(opts)
     vim.api.nvim_set_hl(0, opts.cursor_hl, { bg = '#414868', ctermbg = 8 })
   end
 
+  -- Backdrop for dimming editor behind the float
+  if not hl_exists('KeymashBackdrop') then
+    vim.api.nvim_set_hl(0, 'KeymashBackdrop', { bg = '#000000', ctermbg = 0 })
+  end
+
 end
 
 function M.setup(opts)
