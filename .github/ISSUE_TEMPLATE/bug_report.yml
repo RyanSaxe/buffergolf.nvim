@@ -1,0 +1,36 @@
+name: Bug report
+description: Report a problem with Keymash.nvim
+labels: [bug]
+body:
+  - type: input
+    id: nvim
+    attributes:
+      label: Neovim version
+      placeholder: output of `nvim --version | head -n1`
+    validations:
+      required: true
+  - type: input
+    id: colorscheme
+    attributes:
+      label: Colorscheme
+      placeholder: e.g., tokyonight, gruvbox
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: Steps + short code snippet to reproduce
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+  - type: textarea
+    id: logs
+    attributes:
+      label: Any errors or screenshots
