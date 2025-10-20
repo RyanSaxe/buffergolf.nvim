@@ -13,6 +13,29 @@ local function win_valid(win)
   return type(win) == "number" and vim.api.nvim_win_is_valid(win)
 end
 
+local function copy_indent_options(origin, target)
+  -- Keep indentation behavior in the practice buffer aligned with the source buffer.
+  local opts = {
+    "expandtab",
+    "tabstop",
+    "softtabstop",
+    "shiftwidth",
+    "autoindent",
+    "smartindent",
+    "cindent",
+    "indentexpr",
+    "copyindent",
+    "preserveindent",
+  }
+
+  for _, opt in ipairs(opts) do
+    local ok, value = pcall(vim.api.nvim_get_option_value, opt, { buf = origin })
+    if ok then
+      pcall(vim.api.nvim_set_option_value, opt, value, { buf = target })
+    end
+  end
+end
+
 local function get_session(bufnr)
   return sessions_by_origin[bufnr] or sessions_by_practice[bufnr]
 end
@@ -307,6 +330,8 @@ function M.start(origin_bufnr, config)
   if origin_ft and origin_ft ~= "" then
     vim.api.nvim_set_option_value("filetype", origin_ft, { buf = practice_buf })
   end
+
+  copy_indent_options(origin_bufnr, practice_buf)
 
   local empty_lines = {}
   for _ = 1, #reference do
