@@ -5,21 +5,6 @@ local M = {}
 local sessions_by_origin = {}
 local sessions_by_practice = {}
 
--- Debug logging
-local debug_log_path = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":h:h:h") .. "/debug.log"
-
-local function debug_log(session, message)
-  local timestamp = os.date("%Y-%m-%d %H:%M:%S")
-  local buf_id = session and session.practice_buf or "no-session"
-  local log_line = string.format("[%s] [buf:%s] %s\n", timestamp, buf_id, message)
-
-  local file = io.open(debug_log_path, "a")
-  if file then
-    file:write(log_line)
-    file:close()
-  end
-end
-
 local function buf_valid(buf)
   return type(buf) == "number" and vim.api.nvim_buf_is_valid(buf)
 end
@@ -154,11 +139,9 @@ end
 
 local function refresh_visuals(session)
   if session.refreshing then
-    debug_log(session, "refresh_visuals: already refreshing, skipping")
     return
   end
 
-  debug_log(session, "refresh_visuals: starting")
   session.refreshing = true
 
   local ok, err = pcall(function()
@@ -231,63 +214,39 @@ local function refresh_visuals(session)
   session.refreshing = false
 
   if not ok then
-    debug_log(session, "refresh_visuals: ERROR - " .. tostring(err))
     vim.notify("Buffergolf refresh error: " .. tostring(err), vim.log.levels.ERROR)
-  else
-    debug_log(session, "refresh_visuals: completed successfully")
   end
 end
 
 local function attach_change_watcher(session)
   if session.change_attached then
-    debug_log(session, "attach_change_watcher: already attached, skipping")
     return
   end
   if not buf_valid(session.practice_buf) then
-    debug_log(session, "attach_change_watcher: buffer invalid, skipping")
     return
   end
 
-  debug_log(session, "attach_change_watcher: attempting to attach")
-
   local ok, res = pcall(vim.api.nvim_buf_attach, session.practice_buf, false, {
     on_lines = function(_, buf, _, _, _, _)
-      debug_log(session, string.format("on_lines fired: buf=%d, refreshing=%s", buf, tostring(session.refreshing)))
-
       if session.refreshing then
-        debug_log(session, "on_lines: returning early (refreshing=true)")
         return
       end
-
-      local buf_is_valid = buf_valid(buf)
-      debug_log(session, string.format("on_lines: buf_valid(buf)=%s", tostring(buf_is_valid)))
-      if not buf_is_valid then
-        debug_log(session, "on_lines: DETACHING (buf_valid=false)")
+      if not buf_valid(buf) then
         return true
       end
-
-      local session_matches = sessions_by_practice[buf] == session
-      debug_log(session, string.format("on_lines: session_matches=%s", tostring(session_matches)))
-      if not session_matches then
-        debug_log(session, "on_lines: DETACHING (session mismatch)")
+      if sessions_by_practice[buf] ~= session then
         return true
       end
-
-      debug_log(session, "on_lines: calling timer.on_first_edit and refresh_visuals")
       timer.on_first_edit(session)
       refresh_visuals(session)
     end,
     on_detach = function()
-      debug_log(session, "on_detach fired: setting change_attached=nil")
       session.change_attached = nil
     end,
   })
 
   if ok and res then
     session.change_attached = true
-    debug_log(session, "attach_change_watcher: successfully attached")
-  else
-    debug_log(session, string.format("attach_change_watcher: FAILED to attach (ok=%s, res=%s)", tostring(ok), tostring(res)))
   end
 end
 
@@ -362,43 +321,27 @@ local function disable_matchparen(session)
 end
 
 local function clear_state(session)
-  debug_log(session, "clear_state: called - clearing session state")
-
-  -- Get stack trace to see what's calling this
-  local trace = debug.traceback("", 2)
-  debug_log(session, "clear_state: stack trace:\n" .. trace)
-
   timer.cleanup(session)
   sessions_by_origin[session.origin_buf] = nil
   sessions_by_practice[session.practice_buf] = nil
-  debug_log(session, "clear_state: cleared sessions_by_practice and sessions_by_origin")
-
   if session.change_attached and buf_valid(session.practice_buf) then
     pcall(vim.api.nvim_buf_detach, session.practice_buf)
-    debug_log(session, "clear_state: detached buffer")
   end
   session.change_attached = nil
   session.refreshing = nil
-  debug_log(session, "clear_state: set change_attached and refreshing to nil")
-
   if session.augroup then
     pcall(vim.api.nvim_del_augroup_by_id, session.augroup)
-    debug_log(session, "clear_state: deleted autocommand group")
   end
-
-  debug_log(session, "clear_state: completed")
 end
 
 local function setup_autocmds(session)
   local aug = vim.api.nvim_create_augroup(("BuffergolfSession_%d"):format(session.practice_buf), { clear = true })
   session.augroup = aug
-  debug_log(session, "setup_autocmds: created autocommand group")
 
   vim.api.nvim_create_autocmd("BufEnter", {
     group = aug,
     buffer = session.practice_buf,
     callback = function()
-      debug_log(session, "autocmd: BufEnter fired")
       apply_buffer_defaults(session)
     end,
   })
@@ -407,7 +350,6 @@ local function setup_autocmds(session)
     group = aug,
     buffer = session.practice_buf,
     callback = function()
-      debug_log(session, "autocmd: WinEnter fired - showing stats float")
       timer.show_stats_float(session)
     end,
   })
@@ -416,7 +358,6 @@ local function setup_autocmds(session)
     group = aug,
     buffer = session.practice_buf,
     callback = function()
-      debug_log(session, "autocmd: WinLeave fired - hiding stats float")
       timer.hide_stats_float(session)
     end,
   })
@@ -425,7 +366,6 @@ local function setup_autocmds(session)
     group = aug,
     buffer = session.practice_buf,
     callback = function()
-      debug_log(session, "autocmd: BufWriteCmd fired")
       vim.notify("Buffergolf buffers cannot be written.", vim.log.levels.WARN, { title = "buffergolf" })
     end,
   })
@@ -434,7 +374,6 @@ local function setup_autocmds(session)
     group = aug,
     buffer = session.practice_buf,
     callback = function()
-      debug_log(session, "autocmd: LspAttach fired")
       apply_buffer_defaults(session)
     end,
   })
@@ -443,7 +382,6 @@ local function setup_autocmds(session)
     group = aug,
     buffer = session.practice_buf,
     callback = function()
-      debug_log(session, "autocmd: BufLeave/BufHidden fired")
       if buf_valid(session.practice_buf) then
         pcall(vim.api.nvim_set_option_value, "modified", false, { buf = session.practice_buf })
       end
@@ -454,20 +392,13 @@ local function setup_autocmds(session)
     group = aug,
     buffer = session.practice_buf,
     callback = function()
-      debug_log(session, "autocmd: BufWipeout/BufDelete fired")
-
       -- Only clear state if buffer is actually being destroyed
       -- This prevents spurious events (e.g., from blink.cmp) from breaking the session
       if not vim.api.nvim_buf_is_valid(session.practice_buf) then
-        debug_log(session, "autocmd: buffer is invalid, calling clear_state")
         clear_state(session)
-      else
-        debug_log(session, "autocmd: buffer is still valid, ignoring spurious BufWipeout/BufDelete event")
       end
     end,
   })
-
-  debug_log(session, "setup_autocmds: all autocmds created")
 end
 
 local function normalize_reference_lines(lines, bufnr)
@@ -565,7 +496,6 @@ function M.start(origin_bufnr, config)
 
   sessions_by_origin[origin_bufnr] = session
   sessions_by_practice[practice_buf] = session
-  debug_log(session, string.format("M.start: registered session in sessions_by_origin[%d] and sessions_by_practice[%d]", origin_bufnr, practice_buf))
 
   apply_buffer_defaults(session)
 
@@ -583,11 +513,8 @@ end
 function M.stop(bufnr)
   local session = get_session(bufnr)
   if not session then
-    debug_log(nil, string.format("M.stop: no session found for buffer %d", bufnr))
     return
   end
-
-  debug_log(session, string.format("M.stop: stopping session for buffer %d", bufnr))
 
   local practice_buf = session.practice_buf
   local origin_buf = session.origin_buf
@@ -595,19 +522,15 @@ function M.stop(bufnr)
   if win_valid(session.origin_win) and buf_valid(origin_buf) then
     vim.api.nvim_set_current_win(session.origin_win)
     vim.api.nvim_win_set_buf(session.origin_win, origin_buf)
-    debug_log(session, "M.stop: restored origin window and buffer")
   elseif buf_valid(origin_buf) then
     vim.api.nvim_set_current_buf(origin_buf)
-    debug_log(session, "M.stop: restored origin buffer")
   end
 
   if buf_valid(practice_buf) then
-    debug_log(session, "M.stop: deleting practice buffer")
     vim.api.nvim_buf_delete(practice_buf, { force = true })
   end
 
   clear_state(session)
-  debug_log(session, "M.stop: completed")
 end
 
 function M.start_countdown(bufnr, seconds)
@@ -619,21 +542,6 @@ function M.start_countdown(bufnr, seconds)
 
   timer.start_countdown(session, seconds)
   return true
-end
-
-function M.get_debug_info(bufnr)
-  local session = get_session(bufnr)
-  if not session then
-    return nil
-  end
-
-  return {
-    practice_buf = session.practice_buf,
-    origin_buf = session.origin_buf,
-    change_attached = session.change_attached,
-    refreshing = session.refreshing,
-    buf_valid = buf_valid(session.practice_buf),
-  }
 end
 
 return M

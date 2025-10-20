@@ -74,10 +74,6 @@ function M.setup(opts)
 		M.start_countdown()
 	end, { desc = "Start countdown timer for buffergolf practice buffer" })
 
-	vim.api.nvim_create_user_command("BuffergolfDebug", function()
-		M.debug()
-	end, { desc = "Show buffergolf debug information" })
-
 	if toggle_key and toggle_key ~= "" then
 		vim.keymap.set("n", toggle_key, M.toggle, {
 			desc = "Toggle buffergolf practice buffer",
@@ -139,33 +135,6 @@ function M.start_countdown()
 			Session.start_countdown(new_bufnr, seconds)
 		end
 	end)
-end
-
-function M.debug()
-	local bufnr = vim.api.nvim_get_current_buf()
-	local debug_info = Session.get_debug_info(bufnr)
-
-	if not debug_info then
-		vim.notify("No active buffergolf session in current buffer", vim.log.levels.WARN, { title = "buffergolf" })
-		return
-	end
-
-	local msg = string.format(
-		"Buffergolf Debug Info:\n" ..
-		"  Practice buffer: %d\n" ..
-		"  Origin buffer: %d\n" ..
-		"  Attached: %s\n" ..
-		"  Refreshing: %s\n" ..
-		"  Buffer valid: %s\n" ..
-		"\nCheck debug.log in plugin directory for detailed logs",
-		debug_info.practice_buf,
-		debug_info.origin_buf,
-		tostring(debug_info.change_attached),
-		tostring(debug_info.refreshing),
-		tostring(debug_info.buf_valid)
-	)
-
-	vim.notify(msg, vim.log.levels.INFO, { title = "buffergolf" })
 end
 
 return M

@@ -40,6 +40,42 @@ local function get_display_time(session)
   end
 end
 
+local function normalize_lines(lines, bufnr)
+  -- Convert tabs to spaces if expandtab is on
+  -- This ensures consistent comparison with reference lines
+  local ok, expandtab = pcall(vim.api.nvim_get_option_value, "expandtab", { buf = bufnr })
+  if not ok or not expandtab then
+    return lines
+  end
+
+  local ok_ts, tabstop = pcall(vim.api.nvim_get_option_value, "tabstop", { buf = bufnr })
+  if not ok_ts then
+    tabstop = 8
+  end
+
+  local normalized = {}
+  for _, line in ipairs(lines) do
+    if line:find("\t") then
+      local result = {}
+      local col = 0
+      for char in line:gmatch(".") do
+        if char == "\t" then
+          local spaces = tabstop - (col % tabstop)
+          table.insert(result, string.rep(" ", spaces))
+          col = col + spaces
+        else
+          table.insert(result, char)
+          col = col + 1
+        end
+      end
+      table.insert(normalized, table.concat(result))
+    else
+      table.insert(normalized, line)
+    end
+  end
+  return normalized
+end
+
 local function check_completion(session)
   if not buf_valid(session.practice_buf) or not session.reference_lines then
     return false
@@ -50,12 +86,15 @@ local function check_completion(session)
     return false
   end
 
+  -- Normalize actual lines to match reference line normalization
+  actual_lines = normalize_lines(actual_lines, session.practice_buf)
+
   -- Check if line counts match
   if #actual_lines ~= #session.reference_lines then
     return false
   end
 
-  -- Check if all lines match exactly
+  -- Check if all lines match exactly (after normalization)
   for i = 1, #actual_lines do
     if actual_lines[i] ~= session.reference_lines[i] then
       return false
@@ -97,7 +136,27 @@ local function check_countdown_expired(session)
   return false
 end
 
+local function setup_highlights()
+  -- Setup highlight groups for the stats window
+  local bg_color = vim.api.nvim_get_hl(0, { name = "Normal" }).bg or "#1e1e1e"
+  local border_color = vim.api.nvim_get_hl(0, { name = "FloatBorder" }).fg or "#4a4a4a"
+
+  vim.api.nvim_set_hl(0, "BuffergolfStatsFloat", {
+    bg = bg_color,
+    fg = "#a8c7fa",
+    blend = 0,
+  })
+
+  vim.api.nvim_set_hl(0, "BuffergolfStatsBorder", {
+    fg = "#6d8aad",
+    bg = bg_color,
+  })
+end
+
 local function create_stats_float(session)
+  -- Setup highlights
+  setup_highlights()
+
   -- Create buffer for stats display
   local stats_buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = stats_buf })
@@ -107,8 +166,8 @@ local function create_stats_float(session)
   local win_width = vim.api.nvim_win_get_width(session.practice_win)
   local win_height = vim.api.nvim_win_get_height(session.practice_win)
 
-  -- Calculate position for bottom-right
-  local float_width = 25 -- Width for "⏱ 00:00 ↓ | WPM: 123"
+  -- Calculate position for bottom-right (with padding for border)
+  local float_width = 27 -- Width for stats with padding
   local float_height = 1
 
   -- Create floating window at bottom-right of practice window
@@ -117,13 +176,17 @@ local function create_stats_float(session)
     win = session.practice_win,
     width = float_width,
     height = float_height,
-    row = win_height - float_height,
-    col = win_width - float_width,
+    row = win_height - float_height - 2,
+    col = win_width - float_width - 2,
     anchor = "NW",
     style = "minimal",
+    border = "rounded",
     focusable = false,
     zindex = 50,
   })
+
+  -- Apply custom highlights
+  vim.api.nvim_set_option_value("winhl", "Normal:BuffergolfStatsFloat,FloatBorder:BuffergolfStatsBorder", { win = stats_win })
 
   session.timer_state.stats_win = stats_win
   session.timer_state.stats_buf = stats_buf
