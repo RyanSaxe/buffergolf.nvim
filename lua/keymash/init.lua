@@ -24,16 +24,6 @@ local function can_link(name)
 	return ok and hl ~= nil
 end
 
-local function ensure_highlights_two(opts)
-	if not hl_exists(opts.ghost_hl) then
-		if can_link("Comment") then
-			vim.api.nvim_set_hl(0, opts.ghost_hl, { link = "Comment" })
-		else
-			vim.api.nvim_set_hl(0, opts.ghost_hl, { fg = "#555555", ctermfg = 8 })
-		end
-	end
-end
-
 local function ensure_highlights(opts)
 	if not hl_exists(opts.ghost_hl) then
 		if can_link("Comment") then
