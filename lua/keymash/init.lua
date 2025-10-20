@@ -6,10 +6,8 @@ local default_config = {
 	ghost_hl = "BuffergolfGhost",
 	mismatch_hl = "BuffergolfMismatch",
 	disable_diagnostics = true,
+	disable_inlay_hints = true,
 	disable_matchparen = true,
-	ghost_guard = {
-		allow = {},
-	},
 }
 
 local configured = false

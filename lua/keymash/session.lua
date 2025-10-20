@@ -1,5 +1,3 @@
-local ghost_guard = require("ghost_guard_buf")
-
 local M = {}
 
 local sessions_by_origin = {}
@@ -137,76 +135,182 @@ local function set_ghost_mark(session, row, col, text, actual)
   session.ghost_marks[row] = id
 end
 
-local function refresh_visuals(session)
+local refresh_visuals
+
+local function schedule_refresh(session)
+  if session.refresh_scheduled then
+    return
+  end
+
+  session.refresh_scheduled = true
+
+  vim.schedule(function()
+    session.refresh_scheduled = false
+    if not buf_valid(session.practice_buf) then
+      return
+    end
+    if sessions_by_practice[session.practice_buf] ~= session then
+      return
+    end
+    refresh_visuals(session)
+  end)
+end
+
+refresh_visuals = function(session)
+  if session.refreshing then
+    return
+  end
+
+  session.refreshing = true
+
+  repeat
+    if not buf_valid(session.practice_buf) then
+      break
+    end
+
+    ensure_line_count(session)
+
+    local bufnr = session.practice_buf
+    local actual_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, true)
+    local total = math.max(#actual_lines, #session.reference_lines)
+
+    for row = 1, total do
+      local actual = actual_lines[row]
+      if actual == nil then
+        -- Extend buffer so the ghost text can attach to this row.
+        vim.api.nvim_buf_set_lines(bufnr, row - 1, row - 1, true, { "" })
+        actual = ""
+        actual_lines[row] = actual
+      end
+
+      local reference = session.reference_lines[row] or ""
+      local prefix = 0
+      local matching = math.min(#actual, #reference)
+
+      while prefix < matching do
+        local from = prefix + 1
+        if actual:sub(from, from) ~= reference:sub(from, from) then
+          break
+        end
+        prefix = prefix + 1
+      end
+
+      local mismatch_start = prefix
+      local mismatch_finish = #actual
+
+      vim.api.nvim_buf_clear_namespace(bufnr, session.ns_mismatch, row - 1, row)
+      clear_ghost_mark(session, row)
+
+      if mismatch_finish > mismatch_start then
+        vim.api.nvim_buf_add_highlight(
+          bufnr,
+          session.ns_mismatch,
+          session.config.mismatch_hl,
+          row - 1,
+          mismatch_start,
+          mismatch_finish
+        )
+      end
+
+      local ghost_start_index = prefix + 1
+      local ghost = ""
+      if ghost_start_index <= #reference then
+        ghost = reference:sub(ghost_start_index)
+      end
+
+      local ghost_col = #actual
+      set_ghost_mark(session, row, ghost_col, ghost, actual)
+    end
+
+    -- Remove stale ghost marks if the buffer shrank.
+    if #session.ghost_marks > total then
+      for row = total + 1, #session.ghost_marks do
+        clear_ghost_mark(session, row)
+      end
+    end
+  until true
+
+  if buf_valid(session.practice_buf) then
+    pcall(vim.api.nvim_set_option_value, "modified", false, { buf = session.practice_buf })
+  end
+
+  session.refreshing = false
+end
+
+local function attach_change_watcher(session)
+  if session.change_attached then
+    return
+  end
   if not buf_valid(session.practice_buf) then
     return
   end
 
-  ensure_line_count(session)
-
-  local bufnr = session.practice_buf
-  local actual_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, true)
-  local total = math.max(#actual_lines, #session.reference_lines)
-
-  for row = 1, total do
-    local actual = actual_lines[row]
-    if actual == nil then
-      -- Extend buffer so the ghost text can attach to this row.
-      vim.api.nvim_buf_set_lines(bufnr, row - 1, row - 1, true, { "" })
-      actual = ""
-      actual_lines[row] = actual
-    end
-
-    local reference = session.reference_lines[row] or ""
-    local prefix = 0
-    local matching = math.min(#actual, #reference)
-
-    while prefix < matching do
-      local from = prefix + 1
-      if actual:sub(from, from) ~= reference:sub(from, from) then
-        break
+  local ok, res = pcall(vim.api.nvim_buf_attach, session.practice_buf, false, {
+    on_lines = function(_, buf, _, _, _, _)
+      if session.refreshing then
+        return
       end
-      prefix = prefix + 1
-    end
+      if not buf_valid(buf) then
+        return true
+      end
+      if sessions_by_practice[buf] ~= session then
+        return true
+      end
+      schedule_refresh(session)
+    end,
+    on_bytes = function(_, buf, _, _, _, _, _, _)
+      if session.refreshing then
+        return
+      end
+      if not buf_valid(buf) then
+        return true
+      end
+      if sessions_by_practice[buf] ~= session then
+        return true
+      end
+      schedule_refresh(session)
+    end,
+    on_detach = function()
+      session.change_attached = nil
+    end,
+  })
 
-    local mismatch_start = prefix
-    local mismatch_finish = #actual
-
-    vim.api.nvim_buf_clear_namespace(bufnr, session.ns_mismatch, row - 1, row)
-    clear_ghost_mark(session, row)
-
-    if mismatch_finish > mismatch_start then
-      vim.api.nvim_buf_add_highlight(
-        bufnr,
-        session.ns_mismatch,
-        session.config.mismatch_hl,
-        row - 1,
-        mismatch_start,
-        mismatch_finish
-      )
-    end
-
-    local ghost_start_index = prefix + 1
-    local ghost = ""
-    if ghost_start_index <= #reference then
-      ghost = reference:sub(ghost_start_index)
-    end
-
-    local ghost_col = #actual
-    set_ghost_mark(session, row, ghost_col, ghost, actual)
-  end
-
-  -- Remove stale ghost marks if the buffer shrank.
-  if #session.ghost_marks > total then
-    for row = total + 1, #session.ghost_marks do
-      clear_ghost_mark(session, row)
-    end
+  if ok and res then
+    session.change_attached = true
   end
 end
 
 local function disable_diagnostics(bufnr)
   if type(vim.diagnostic) == "table" and vim.diagnostic.disable then
     pcall(vim.diagnostic.disable, bufnr)
+  end
+end
+
+local function disable_inlay_hints(bufnr)
+  local ih = vim.lsp and vim.lsp.inlay_hint
+  if ih == nil then
+    return
+  end
+
+  if type(ih) == "table" then
+    if ih.enable then
+      pcall(ih.enable, false, { bufnr = bufnr })
+    elseif ih.disable then
+      pcall(ih.disable, bufnr)
+    end
+  elseif type(ih) == "function" then
+    pcall(ih, bufnr, false)
+  end
+end
+
+local function apply_buffer_defaults(session)
+  local buf = session.practice_buf
+
+  if session.config.disable_diagnostics ~= false then
+    disable_diagnostics(buf)
+  end
+  if session.config.disable_inlay_hints ~= false then
+    disable_inlay_hints(buf)
   end
 end
 
@@ -236,43 +340,15 @@ local function disable_matchparen(session)
   pcall(vim.api.nvim_buf_set_var, session.practice_buf, "matchup_matchparen_enabled", 0)
 end
 
-local function enable_ghost_guard(session)
-  local cfg = session.config.ghost_guard
-  if cfg == false then
-    if session.config.disable_diagnostics ~= false then
-      disable_diagnostics(session.practice_buf)
-    end
-    return
-  end
-
-  local allow = { "BuffergolfGhostNS" }
-  if type(cfg) == "table" and type(cfg.allow) == "table" then
-    for _, needle in ipairs(cfg.allow) do
-      if type(needle) == "string" then
-        table.insert(allow, needle)
-      end
-    end
-  end
-
-  local disable_diag = session.config.disable_diagnostics ~= false
-
-  ghost_guard.enable(session.practice_buf, {
-    allow = allow,
-    disable_diagnostics = disable_diag,
-  })
-  session.guard_enabled = true
-end
-
-local function disable_ghost_guard(session)
-  if session.guard_enabled then
-    ghost_guard.disable(session.practice_buf)
-    session.guard_enabled = nil
-  end
-end
-
 local function clear_state(session)
   sessions_by_origin[session.origin_buf] = nil
   sessions_by_practice[session.practice_buf] = nil
+  if session.change_attached and buf_valid(session.practice_buf) then
+    pcall(vim.api.nvim_buf_detach, session.practice_buf)
+  end
+  session.change_attached = nil
+  session.refresh_scheduled = nil
+  session.refreshing = nil
   if session.augroup then
     pcall(vim.api.nvim_del_augroup_by_id, session.augroup)
   end
@@ -286,7 +362,15 @@ local function setup_autocmds(session)
     group = aug,
     buffer = session.practice_buf,
     callback = function()
-      refresh_visuals(session)
+      schedule_refresh(session)
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("BufEnter", {
+    group = aug,
+    buffer = session.practice_buf,
+    callback = function()
+      apply_buffer_defaults(session)
     end,
   })
 
@@ -298,11 +382,28 @@ local function setup_autocmds(session)
     end,
   })
 
+  vim.api.nvim_create_autocmd("LspAttach", {
+    group = aug,
+    buffer = session.practice_buf,
+    callback = function()
+      apply_buffer_defaults(session)
+    end,
+  })
+
+  vim.api.nvim_create_autocmd({ "BufLeave", "BufHidden" }, {
+    group = aug,
+    buffer = session.practice_buf,
+    callback = function()
+      if buf_valid(session.practice_buf) then
+        pcall(vim.api.nvim_set_option_value, "modified", false, { buf = session.practice_buf })
+      end
+    end,
+  })
+
   vim.api.nvim_create_autocmd({ "BufWipeout", "BufDelete" }, {
     group = aug,
     buffer = session.practice_buf,
     callback = function()
-      disable_ghost_guard(session)
       clear_state(session)
     end,
   })
@@ -318,13 +419,13 @@ function M.start(origin_bufnr, config)
     reference = { "" }
   end
 
-  local practice_buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_set_option_value("buftype", "nofile", { buf = practice_buf })
+  local practice_buf = vim.api.nvim_create_buf(false, false)
   vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = practice_buf })
   vim.api.nvim_set_option_value("swapfile", false, { buf = practice_buf })
   vim.api.nvim_set_option_value("undofile", false, { buf = practice_buf })
   vim.api.nvim_set_option_value("modifiable", true, { buf = practice_buf })
   vim.api.nvim_set_option_value("buflisted", false, { buf = practice_buf })
+  vim.api.nvim_set_option_value("buftype", "", { buf = practice_buf })
 
   local origin_ft = vim.api.nvim_get_option_value("filetype", { buf = origin_bufnr })
   if origin_ft and origin_ft ~= "" then
@@ -343,7 +444,7 @@ function M.start(origin_bufnr, config)
   vim.api.nvim_buf_set_lines(practice_buf, 0, -1, true, empty_lines)
 
   local current_win = vim.api.nvim_get_current_win()
-  vim.api.nvim_win_set_buf(current_win, practice_buf)
+  pcall(vim.api.nvim_buf_set_var, practice_buf, "keymash_practice", true)
 
   local session = {
     origin_buf = origin_bufnr,
@@ -361,10 +462,15 @@ function M.start(origin_bufnr, config)
   sessions_by_origin[origin_bufnr] = session
   sessions_by_practice[practice_buf] = session
 
+  apply_buffer_defaults(session)
+
+  vim.api.nvim_win_set_buf(current_win, practice_buf)
+  session.practice_win = vim.api.nvim_get_current_win()
+
   disable_matchparen(session)
-  enable_ghost_guard(session)
 
   setup_autocmds(session)
+  attach_change_watcher(session)
   refresh_visuals(session)
 end
 
@@ -383,8 +489,6 @@ function M.stop(bufnr)
   elseif buf_valid(origin_buf) then
     vim.api.nvim_set_current_buf(origin_buf)
   end
-
-  disable_ghost_guard(session)
 
   if buf_valid(practice_buf) then
     vim.api.nvim_buf_delete(practice_buf, { force = true })
