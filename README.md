@@ -1,79 +1,270 @@
-# Keymash.nvim (buffergolf prototype)
+# buffergolf.nvim
 
-Practice re-typing any buffer from scratch inside a dedicated scratch buffer. The reference text appears as ghost text; you type into a normal buffer with your usual plugins and keymaps. Any character that diverges from the reference is highlighted in red with an underline.
+**A Neovim plugin for deliberate touch-typing practice, and vim practice, on actual code.**
+
+Transform any buffer into an interactive typing practice environment. Practice re-typing source code from scratch while seeing the reference text as ghost text. Get real-time feedback on your WPM and challenge yourself with countdown timers.
+
+INSERT DEMO VIDEO HERE.
 
 ## Features
-- Scratch buffer mirrors the source filetype but starts empty
-- Reference text displayed as inline ghost text (per-line preview)
-- Divergent characters are highlighted with a customizable group (red + underline by default) while the reference character still appears inline
-- LSP diagnostics and inline hints muted so the practice buffer stays distraction-free
-- Practice buffer keeps a normal `buftype`, allowing LSP completion/semantic features to attach while writes remain intercepted
+
+- **Ghost Text Practice**: Reference text appears inline beyond what you've typed
+- **Real-time Feedback**: Mismatched characters highlighted in red with underline
+- **Live Statistics**: Floating window shows elapsed time and WPM as you type
+- **Countdown Mode**: Practice with time pressure
+- **LSP-Friendly**: Practice buffer maintains normal functionality - completion, semantic features, and keymaps all work
+- **Distraction-Free**: Diagnostics, inlay hints, and conflicting plugins automatically disabled
+- **Auto-Completion Detection**: Session automatically locks when you match the reference perfectly
+- **Filetype Preservation**: Practice buffer keeps the same filetype for syntax highlighting
+
+NOTE: you may have to disable AI completion plugins (e.g., Copilot, Codeium) in practice buffers to avoid interference. See the [installation section](#installation) for examples.
 
 ## Requirements
-- Neovim 0.9+ (API used: `nvim_set_hl`, extmarks, autocmds)
 
-## Install
-### lazy.nvim
+- Neovim 0.11+
+
+## Installation
+
+### lazy.nvim (LazyVim)
+
+**Basic Setup**
+
+Add to your `~/.config/nvim/lua/plugins/buffergolf.lua`:
+
 ```lua
-{
-  "yourname/keymash.nvim",
-  config = function()
-    require("keymash").setup()
-  end,
+return {
+  "ryansaxe/buffergolf.nvim",
+  opts = {},
 }
 ```
 
-### packer.nvim
+**Custom Configuration**
+
 ```lua
-use {
-  "yourname/keymash.nvim",
-  config = function()
-    require("keymash").setup()
+return {
+  "ryansaxe/buffergolf.nvim",
+  opts = {
+    -- Highlight groups
+    ghost_hl = "BuffergolfGhost",
+    mismatch_hl = "BuffergolfMismatch",
+
+    -- Disable distracting features
+    disable_diagnostics = true,
+    disable_inlay_hints = true,
+    disable_matchparen = true,
+
+    -- Keymaps (set to false to disable default keymaps)
+    keymaps = {
+      toggle = "<leader>bg",     -- Toggle practice session
+      countdown = "<leader>bG",  -- Start countdown mode
+    },
+  },
+}
+```
+
+**Disable Copilot in Practice Buffers**
+
+If you use Copilot, disable it in practice buffers using an autocmd:
+
+```lua
+return {
+  "ryansaxe/buffergolf.nvim",
+  opts = {},
+  config = function(_, opts)
+    require("buffergolf").setup(opts)
+
+    -- Disable Copilot in practice buffers
+    local group = vim.api.nvim_create_augroup("BufferGolfCopilotMute", { clear = true })
+    vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter" }, {
+      group = group,
+      callback = function(event)
+        local buf = event.buf
+        local ok, is_practice = pcall(vim.api.nvim_buf_get_var, buf, "buffergolf_practice")
+        if ok and is_practice then
+          vim.b[buf].copilot_enabled = false
+        else
+          pcall(vim.api.nvim_buf_del_var, buf, "copilot_enabled")
+        end
+      end,
+    })
   end,
 }
 ```
 
 ## Usage
-- `:Keymash` — toggle practice for the current buffer
-- `:KeymashStop` — stop the session if active
 
-What happens when you start a session:
-- A new scratch buffer replaces the current window (the original buffer stays untouched)
-- The scratch buffer keeps the same `filetype`, so Treesitter, keymaps, and commands continue to work
-- Reference text appears as ghost text past the portion you have already typed
-- Any mismatching characters in your buffer are highlighted red+underline via `BuffergolfMismatch`
-- Closing the practice buffer never prompts for writes; `:w` simply shows a warning instead
+### Starting a Practice Session
+
+**Method 1: Command**
+
+```vim
+:Buffergolf
+```
+
+**Method 2: Keymap** (default: `<leader>bg`)
+
+```
+<leader>bg
+```
+
+**What happens:**
+
+1. Current buffer becomes the reference
+2. Empty scratch buffer opens with the same filetype
+3. Reference text appears as ghost text
+4. Timer starts on your first keystroke
+5. Mismatches highlighted in real-time
+6. Stats window shows time and WPM
+
+### Countdown Mode
+
+Challenge yourself with a time limit:
+
+```vim
+:BuffergolfCountdown
+" Enter duration in seconds (e.g., 60 for 1 minute)
+```
+
+Or use the keymap (default: `<leader>bG`):
+
+```
+<leader>bG
+```
+
+Timer counts down and session locks when time expires.
+
+### Stopping a Session
+
+**Method 1: Toggle off**
+
+```vim
+:Buffergolf  " or <leader>bg
+```
+
+**Method 2: Explicit stop**
+
+```vim
+:BuffergolfStop
+```
+
+Practice buffer closes without saving prompts and returns to original buffer.
+
+### Completion
+
+When your practice buffer exactly matches the reference:
+
+- Buffer automatically locks
+- Stats freeze with final time and WPM
+- Green checkmark appears in stats window
+- Notification: "Completed!"
 
 ## Configuration
-```lua
-require("keymash").setup({
-  ghost_hl = "BuffergolfGhost",          -- highlight for reference ghost text (defaults link to Comment)
-  mismatch_hl = "BuffergolfMismatch",    -- highlight for mismatched characters (defaults red + underline)
-  disable_diagnostics = true,            -- disable diagnostics/inlay hints inside the practice buffer
-  disable_inlay_hints = true,
-  disable_matchparen = true,             -- remove MatchParen highlight to keep ghost text clean
-})
-```
-Both highlight groups include cterm fallbacks and are re-applied on `ColorScheme`.
 
-### Compatibility notes
-- Typing happens in a normal modifiable buffer—no more overtype tricks or blocked normal-mode operators.
-- `vim.b.keymash_practice` is set to `true` inside the scratch buffer; use it to toggle plugin-specific behavior (disable Copilot, ghost text sources, etc.) in your own config.
-- Completion frameworks vary widely—ensure any ghost text or AI overlays are disabled on these buffers in your personal setup.
-- MatchParen highlighting is disabled by default inside the practice buffer so the inline comparison remains legible.
-- Diagnostics are disabled by default so LSP servers do not flood the buffer with warnings as you type.
+### Default Configuration
+
+```lua
+return {
+  "ryansaxe/buffergolf.nvim",
+  opts = {
+    -- Highlight for reference ghost text (linked to Comment by default)
+    ghost_hl = "BuffergolfGhost",
+
+    -- Highlight for mismatched characters (red + underline by default)
+    mismatch_hl = "BuffergolfMismatch",
+
+    -- Disable LSP diagnostics in practice buffer (recommended)
+    disable_diagnostics = true,
+
+    -- Disable LSP inlay hints in practice buffer (recommended)
+    disable_inlay_hints = true,
+
+    -- Disable matchparen highlighting (keeps ghost text clean)
+    disable_matchparen = true,
+
+    -- Keymaps
+    keymaps = {
+      toggle = "<leader>bg",     -- Toggle practice session
+      countdown = "<leader>bG",  -- Start countdown mode
+    },
+  },
+}
+```
+
+### Custom Highlight Colors
+
+To customize the appearance:
+
+```lua
+-- After calling setup(), or in your colorscheme config
+vim.api.nvim_set_hl(0, "BuffergolfGhost", { fg = "#5c6370", italic = true })
+vim.api.nvim_set_hl(0, "BuffergolfMismatch", { fg = "#e06c75", underline = true, bg = "#3e2929" })
+```
+
+### Disable Default Keymaps
+
+```lua
+return {
+  "ryansaxe/buffergolf.nvim",
+  opts = {
+    keymaps = {
+      toggle = false,     -- Disable default toggle keymap
+      countdown = false,  -- Disable default countdown keymap
+    },
+  },
+  keys = {
+    { "<leader>tp", "<cmd>Buffergolf<cr>", desc = "Toggle Buffergolf" },
+    { "<leader>tc", "<cmd>BuffergolfCountdown<cr>", desc = "Buffergolf Countdown" },
+  },
+}
+```
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `:Buffergolf` | Toggle practice session for current buffer |
+| `:BuffergolfStop` | Stop active practice session |
+| `:BuffergolfCountdown` | Start countdown timer practice |
 
 ## How It Works
-- Captures the current buffer’s contents as reference lines
-- Opens an unlisted scratch buffer with a normal `buftype` that shares the original `filetype`
-- Renders reference text as per-line ghost text using extmarks
-- Re-computes a simple per-line diff on every text change; mismatched characters receive a highlight overlay
-- Keeps the buffer length in sync with the reference so you always see upcoming ghost text
 
-## Roadmap
-- Provide an API to supply custom reference text (instead of reading from the current buffer)
-- Add lightweight stats (accuracy/WPM) for completed runs
-- Optional rename to `buffergolf.nvim` with a migration alias
+1. **Session Creation**: Captures current buffer content as reference
+2. **Scratch Buffer**: Opens unlisted scratch buffer with same filetype
+3. **Visual Rendering**: Uses extmarks for ghost text, highlights for mismatches
+4. **Change Detection**: Attaches to buffer events, updates visuals on every keystroke
+5. **Statistics**: Calculates WPM as `(correct_chars / 5) / minutes`
+6. **Completion Check**: Compares buffer to reference on every change
+7. **Cleanup**: Removes extmarks, highlights, and autocommands on session end
 
-## Contributing
-Issues and PRs are welcome. Please include a minimal reproduction for visual or highlight issues (Neovim version, colorscheme, and a short snippet). Thanks!
+## Buffer Variables
+
+The plugin sets `vim.b.buffergolf_practice = true` in practice buffers. Use this to conditionally disable conflicting plugins:
+
+```lua
+-- Example: Disable plugin in buffergolf practice buffers
+if vim.b.buffergolf_practice then
+  return
+end
+```
+
+## Compatibility
+
+The plugin automatically handles common compatibility issues:
+
+**Automatically Disabled:**
+
+- `mini.pairs` autopairs
+- `nvim-autopairs`
+- `nvim-matchup` bracket matching
+- Builtin MatchParen highlighting
+- LSP diagnostics (configurable)
+- LSP inlay hints (configurable)
+- Copilot
+
+You can re-enable these features in practice buffers by setting the respective options to `false` in the setup configuration. I just find, when practicing, these are more distracting than helpful due to how that can interfere with the ghost text and visual clarity.
+
+**Recommended Manual Disabling:**
+
+If you have any plugins that add ghost text, I suggest disabling them in practice buffers. These buffers work fine with completion (e.g. blink.cmp), but you should disable the ghost-text features to avoid visual clutter and interference.
+
+See the [installation section](#installation) for examples.
