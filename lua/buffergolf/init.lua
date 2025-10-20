@@ -1,4 +1,4 @@
-local Session = require("keymash.session")
+local Session = require("buffergolf.session")
 
 local M = {}
 
@@ -8,6 +8,9 @@ local default_config = {
 	disable_diagnostics = true,
 	disable_inlay_hints = true,
 	disable_matchparen = true,
+	keymaps = {
+		toggle = "<leader>bg",
+	},
 }
 
 local configured = false
@@ -48,6 +51,9 @@ function M.setup(opts)
 	M.config = vim.tbl_deep_extend("force", {}, default_config, opts or {})
 	ensure_highlights(M.config)
 
+	local keymaps = M.config.keymaps or {}
+	local toggle_key = keymaps.toggle
+
 	vim.api.nvim_create_autocmd("ColorScheme", {
 		group = vim.api.nvim_create_augroup("BuffergolfHL", { clear = true }),
 		callback = function()
@@ -55,13 +61,20 @@ function M.setup(opts)
 		end,
 	})
 
-	vim.api.nvim_create_user_command("Keymash", function()
+	vim.api.nvim_create_user_command("Buffergolf", function()
 		M.toggle()
 	end, { desc = "Toggle buffergolf practice buffer" })
 
-	vim.api.nvim_create_user_command("KeymashStop", function()
+	vim.api.nvim_create_user_command("BuffergolfStop", function()
 		M.stop()
 	end, { desc = "Stop buffergolf practice buffer" })
+
+	if toggle_key and toggle_key ~= "" then
+		vim.keymap.set("n", toggle_key, M.toggle, {
+			desc = "Toggle buffergolf practice buffer",
+			silent = true,
+		})
+	end
 
 	configured = true
 end

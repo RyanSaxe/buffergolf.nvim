@@ -444,7 +444,7 @@ function M.start(origin_bufnr, config)
   vim.api.nvim_buf_set_lines(practice_buf, 0, -1, true, empty_lines)
 
   local current_win = vim.api.nvim_get_current_win()
-  pcall(vim.api.nvim_buf_set_var, practice_buf, "keymash_practice", true)
+  pcall(vim.api.nvim_buf_set_var, practice_buf, "buffergolf_practice", true)
 
   local session = {
     origin_buf = origin_bufnr,
