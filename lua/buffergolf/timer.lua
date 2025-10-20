@@ -40,6 +40,28 @@ local function get_display_time(session)
   end
 end
 
+local function strip_trailing_empty_lines(lines)
+  -- Remove trailing empty lines to allow Enter-created lines
+  -- without blocking completion
+  local last_non_empty = 0
+  for i = #lines, 1, -1 do
+    if lines[i] ~= "" then
+      last_non_empty = i
+      break
+    end
+  end
+
+  if last_non_empty == 0 then
+    return {}
+  end
+
+  local result = {}
+  for i = 1, last_non_empty do
+    table.insert(result, lines[i])
+  end
+  return result
+end
+
 local function normalize_lines(lines, bufnr)
   -- Convert tabs to spaces if expandtab is on
   -- This ensures consistent comparison with reference lines
@@ -89,14 +111,18 @@ local function check_completion(session)
   -- Normalize actual lines to match reference line normalization
   actual_lines = normalize_lines(actual_lines, session.practice_buf)
 
+  -- Strip trailing empty lines from both actual and reference
+  actual_lines = strip_trailing_empty_lines(actual_lines)
+  local reference_lines = strip_trailing_empty_lines(session.reference_lines)
+
   -- Check if line counts match
-  if #actual_lines ~= #session.reference_lines then
+  if #actual_lines ~= #reference_lines then
     return false
   end
 
   -- Check if all lines match exactly (after normalization)
   for i = 1, #actual_lines do
-    if actual_lines[i] ~= session.reference_lines[i] then
+    if actual_lines[i] ~= reference_lines[i] then
       return false
     end
   end
@@ -113,23 +139,39 @@ local function freeze_stats(session)
   session.timer_state.frozen_wpm = stats.calculate_wpm(session)
 end
 
+local function complete_session(session, reason)
+  -- Unified completion logic for both text completion and countdown expiration
+  if session.timer_state.completed then
+    return -- Already completed
+  end
+
+  -- Freeze stats first
+  freeze_stats(session)
+
+  -- Mark as completed
+  session.timer_state.completed = true
+
+  -- Lock the buffer to prevent further edits
+  if buf_valid(session.practice_buf) then
+    pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = session.practice_buf })
+  end
+
+  -- Notify user based on completion reason
+  if reason == "completed" then
+    vim.notify("Buffergolf completed! 🎉", vim.log.levels.INFO, { title = "buffergolf" })
+  elseif reason == "time_up" then
+    vim.notify("Time's up!", vim.log.levels.WARN, { title = "buffergolf" })
+  end
+end
+
 local function check_countdown_expired(session)
-  if not session.timer_state.countdown_mode or session.timer_state.locked then
+  if not session.timer_state.countdown_mode or session.timer_state.completed then
     return false
   end
 
   local elapsed = get_elapsed_seconds(session)
   if elapsed >= session.timer_state.countdown_duration then
-    session.timer_state.locked = true
-
-    -- Freeze stats before locking
-    freeze_stats(session)
-
-    -- Lock the buffer
-    if buf_valid(session.practice_buf) then
-      pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = session.practice_buf })
-    end
-
+    complete_session(session, "time_up")
     return true
   end
 
@@ -149,6 +191,19 @@ local function setup_highlights()
 
   vim.api.nvim_set_hl(0, "BuffergolfStatsBorder", {
     fg = "#6d8aad",
+    bg = bg_color,
+  })
+
+  -- Success/completion highlight (green)
+  vim.api.nvim_set_hl(0, "BuffergolfStatsComplete", {
+    bg = bg_color,
+    fg = "#7fdc7f",
+    bold = true,
+    blend = 0,
+  })
+
+  vim.api.nvim_set_hl(0, "BuffergolfStatsBorderComplete", {
+    fg = "#5eb65e",
     bg = bg_color,
   })
 end
@@ -202,8 +257,7 @@ function M.update_stats_float(session)
 
   -- Check for completion
   if not session.timer_state.completed and check_completion(session) then
-    session.timer_state.completed = true
-    freeze_stats(session)
+    complete_session(session, "completed")
   end
 
   -- Use frozen values if locked or completed
@@ -217,10 +271,27 @@ function M.update_stats_float(session)
   end
 
   local stats_text
-  if session.timer_state.countdown_mode then
-    stats_text = string.format("⏱ %s ↓ | WPM: %d", time_str, wpm)
+  if session.timer_state.completed then
+    -- Show completion indicator
+    if session.timer_state.countdown_mode then
+      stats_text = string.format("✓ %s ↓ | WPM: %d", time_str, wpm)
+    else
+      stats_text = string.format("✓ %s | WPM: %d", time_str, wpm)
+    end
   else
-    stats_text = string.format("⏱ %s | WPM: %d", time_str, wpm)
+    if session.timer_state.countdown_mode then
+      stats_text = string.format("⏱ %s ↓ | WPM: %d", time_str, wpm)
+    else
+      stats_text = string.format("⏱ %s | WPM: %d", time_str, wpm)
+    end
+  end
+
+  -- Update window highlights based on completion state
+  if session.timer_state.stats_win and win_valid(session.timer_state.stats_win) then
+    local winhl = session.timer_state.completed
+      and "Normal:BuffergolfStatsComplete,FloatBorder:BuffergolfStatsBorderComplete"
+      or "Normal:BuffergolfStatsFloat,FloatBorder:BuffergolfStatsBorder"
+    pcall(vim.api.nvim_set_option_value, "winhl", winhl, { win = session.timer_state.stats_win })
   end
 
   -- Update buffer text (doesn't cause flickering)
