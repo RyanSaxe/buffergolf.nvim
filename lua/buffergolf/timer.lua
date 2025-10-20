@@ -222,7 +222,7 @@ local function create_stats_float(session)
   local win_height = vim.api.nvim_win_get_height(session.practice_win)
 
   -- Calculate position for bottom-right (with padding for border)
-  local float_width = 27 -- Width for stats with padding
+  local float_width = 45 -- Width for stats with keystrokes and par
   local float_height = 1
 
   -- Create floating window at bottom-right of practice window
@@ -270,19 +270,23 @@ function M.update_stats_float(session)
     wpm = stats.calculate_wpm(session)
   end
 
+  -- Get keystroke and par info
+  local keystrokes = stats.get_keystroke_count(session)
+  local par = stats.calculate_par(session.reference_lines)
+
   local stats_text
   if session.timer_state.completed then
     -- Show completion indicator
     if session.timer_state.countdown_mode then
-      stats_text = string.format("✓ %s ↓ | WPM: %d", time_str, wpm)
+      stats_text = string.format("✓ %s ↓ | WPM: %d | Keys: %d | Par: %d", time_str, wpm, keystrokes, par)
     else
-      stats_text = string.format("✓ %s | WPM: %d", time_str, wpm)
+      stats_text = string.format("✓ %s | WPM: %d | Keys: %d | Par: %d", time_str, wpm, keystrokes, par)
     end
   else
     if session.timer_state.countdown_mode then
-      stats_text = string.format("⏱ %s ↓ | WPM: %d", time_str, wpm)
+      stats_text = string.format("⏱ %s ↓ | WPM: %d | Keys: %d | Par: %d", time_str, wpm, keystrokes, par)
     else
-      stats_text = string.format("⏱ %s | WPM: %d", time_str, wpm)
+      stats_text = string.format("⏱ %s | WPM: %d | Keys: %d | Par: %d", time_str, wpm, keystrokes, par)
     end
   end
 

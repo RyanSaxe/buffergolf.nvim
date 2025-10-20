@@ -74,6 +74,11 @@ function M.setup(opts)
 		M.start_countdown()
 	end, { desc = "Start countdown timer for buffergolf practice buffer" })
 
+	-- DEBUG: Add debug command
+	vim.api.nvim_create_user_command("BuffergolfDebug", function()
+		Session.debug_keys()
+	end, { desc = "Debug: Show recent keystrokes captured" })
+
 	if toggle_key and toggle_key ~= "" then
 		vim.keymap.set("n", toggle_key, M.toggle, {
 			desc = "Toggle buffergolf practice buffer",

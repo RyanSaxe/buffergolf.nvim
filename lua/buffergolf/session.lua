@@ -1,4 +1,5 @@
 local timer = require("buffergolf.timer")
+local keystroke = require("buffergolf.keystroke")
 
 local M = {}
 
@@ -322,6 +323,7 @@ end
 
 local function clear_state(session)
   timer.cleanup(session)
+  keystroke.cleanup_session(session)
   sessions_by_origin[session.origin_buf] = nil
   sessions_by_practice[session.practice_buf] = nil
   if session.change_attached and buf_valid(session.practice_buf) then
@@ -506,6 +508,10 @@ function M.start(origin_bufnr, config)
 
   setup_autocmds(session)
   attach_change_watcher(session)
+
+  -- Set up keystroke tracking using the robust keystroke module
+  keystroke.init_session(session)
+
   timer.init(session)
   refresh_visuals(session)
 end
@@ -542,6 +548,26 @@ function M.start_countdown(bufnr, seconds)
 
   timer.start_countdown(session, seconds)
   return true
+end
+
+-- DEBUG: Expose function to print debug keys
+function M.debug_keys(bufnr)
+  local session = get_session(bufnr or vim.api.nvim_get_current_buf())
+  if not session then
+    print("No active buffergolf session")
+    return
+  end
+
+  local debug_keys = keystroke.get_debug_keys(session)
+  if not debug_keys or #debug_keys == 0 then
+    print("No debug keys available")
+    return
+  end
+
+  print("Recent keys captured:")
+  for _, entry in ipairs(debug_keys) do
+    print("  " .. entry)
+  end
 end
 
 return M

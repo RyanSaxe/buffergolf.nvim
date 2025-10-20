@@ -10,7 +10,7 @@ INSERT DEMO VIDEO HERE.
 
 - **Ghost Text Practice**: Reference text appears inline beyond what you've typed
 - **Real-time Feedback**: Mismatched characters highlighted in red with underline
-- **Live Statistics**: Floating window shows elapsed time and WPM as you type
+- **Live Statistics**: Floating window shows elapsed time, WPM, keystroke count, and par as you type
 - **Countdown Mode**: Practice with time pressure
 - **LSP-Friendly**: Practice buffer maintains normal functionality - completion, semantic features, and keymaps all work
 - **Distraction-Free**: Diagnostics, inlay hints, and conflicting plugins automatically disabled
@@ -18,6 +18,27 @@ INSERT DEMO VIDEO HERE.
 - **Filetype Preservation**: Practice buffer keeps the same filetype for syntax highlighting
 
 NOTE: you may have to disable AI completion plugins (e.g., Copilot, Codeium) in practice buffers to avoid interference. See the [installation section](#installation) for examples.
+
+## Keystroke Tracking & Golf Scoring
+
+The plugin tracks every keystroke you make during practice sessions, enabling golf-style scoring where the goal is to complete the text in the fewest keystrokes possible.
+
+### Features
+
+- **Keystroke Counter**: Displays real-time keystroke count in the stats window
+- **Par Calculation**: Shows the "optimal" number of keystrokes needed (calculated as character count + newlines + 1 for entering insert mode)
+- **Golf Scoring**: Compare your keystroke count against par to see how efficiently you're typing
+
+### Known Limitations
+
+**Motion Command Counting**: Some vim motion commands (like `G` to go to end of file, `gg` to go to beginning) may count as 3-5 keystrokes instead of 1. This is due to terminal escape sequences that vim uses internally for cursor positioning that are difficult to filter out completely.
+
+- Insert mode counting is accurate (every key you type counts as 1)
+- Most normal mode commands count correctly
+- Large cursor movements (G, gg, H, M, L) may over-count by a few keystrokes
+- This is a known limitation of tracking keystrokes at the vim level
+
+The keystroke tracking uses a "command depth" approach with a timer to filter out most internal vim operations, but some escape sequences still get through, especially for large cursor movements. Despite this limitation, the counts are consistent and useful for tracking your improvement over time.
 
 ## Requirements
 
@@ -114,7 +135,7 @@ return {
 3. Reference text appears as ghost text
 4. Timer starts on your first keystroke
 5. Mismatches highlighted in real-time
-6. Stats window shows time and WPM
+6. Stats window shows time, WPM, keystroke count, and par
 
 ### Countdown Mode
 

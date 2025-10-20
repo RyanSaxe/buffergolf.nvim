@@ -1,7 +1,39 @@
+local keystroke = require("buffergolf.keystroke")
+
 local M = {}
 
 local function trim_whitespace(str)
   return str:match("^%s*(.-)%s*$") or ""
+end
+
+function M.calculate_par(reference_lines)
+  -- Calculate par as the number of keystrokes needed to type the reference text
+  -- from an empty buffer, excluding leading/trailing whitespace per line
+  -- (since autoindent should handle those for free)
+  if not reference_lines or #reference_lines == 0 then
+    return 0
+  end
+
+  local par = 0
+
+  for _, line in ipairs(reference_lines) do
+    local trimmed = trim_whitespace(line)
+    par = par + #trimmed
+  end
+
+  -- Add newlines between lines (not after the last line)
+  if #reference_lines > 1 then
+    par = par + (#reference_lines - 1)
+  end
+
+  -- Add one keystroke to enter insert mode
+  par = par + 1
+
+  return par
+end
+
+function M.get_keystroke_count(session)
+  return keystroke.get_count(session)
 end
 
 function M.count_correct_characters(session)
@@ -69,10 +101,14 @@ end
 function M.get_stats(session)
   local correct_chars = M.count_correct_characters(session)
   local wpm = M.calculate_wpm(session)
+  local keystrokes = M.get_keystroke_count(session)
+  local par = M.calculate_par(session.reference_lines)
 
   return {
     correct_chars = correct_chars,
     wpm = wpm,
+    keystrokes = keystrokes,
+    par = par,
   }
 end
 
