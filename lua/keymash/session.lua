@@ -42,17 +42,17 @@ local function render_dim_line(session, row0)
   if len == 0 then
     return
   end
-  -- Build spans of columns that should remain dimmed (everything except typed-correct)
+  -- Build spans of columns that should remain dimmed (everything except typed cells)
   local row_typed = (session.typed and session.typed[row0]) or {}
   local in_span = false
   local span_start = 0
   for col = 0, len - 1 do
     local entry = row_typed[col]
-    local is_correct = entry and entry.status == 'correct'
-    if not is_correct and not in_span then
+    local is_typed = entry and (entry.status == 'correct' or entry.status == 'error')
+    if not is_typed and not in_span then
       in_span = true
       span_start = col
-    elseif is_correct and in_span then
+    elseif is_typed and in_span then
       -- close span at col
       vim.api.nvim_buf_add_highlight(bufnr, ns_dim, cfg.dim_hl, row0, span_start, col)
       in_span = false
@@ -134,6 +134,8 @@ local function mark_char(session, row0, col0, status)
     priority = session.prio_typed,
   })
   row[col0] = { id = id, status = 'error' }
+  -- update dim for this line to avoid dim under error cell
+  render_dim_line(session, row0)
 end
 
 local function clear_char(session, row0, col0)
@@ -182,7 +184,27 @@ local function setup_autocmds(session)
         vim.api.nvim_buf_clear_namespace(buf, session.ns_dim, 0, -1)
         vim.api.nvim_buf_clear_namespace(buf, session.ns_marks, 0, -1)
       end
+      if win_valid(session.backdrop_win) then
+        pcall(vim.api.nvim_win_close, session.backdrop_win, true)
+      end
+      if buf_valid(session.backdrop_buf) then
+        pcall(vim.api.nvim_buf_delete, session.backdrop_buf, { force = true })
+      end
       clear_state(session.origin_buf, session.practice_buf)
+    end,
+  })
+
+  -- Close backdrop if the practice window is closed (e.g., :q on the float)
+  vim.api.nvim_create_autocmd('WinClosed', {
+    group = aug,
+    pattern = tostring(session.practice_win),
+    callback = function()
+      if win_valid(session.backdrop_win) then
+        pcall(vim.api.nvim_win_close, session.backdrop_win, true)
+      end
+      if buf_valid(session.backdrop_buf) then
+        pcall(vim.api.nvim_buf_delete, session.backdrop_buf, { force = true })
+      end
     end,
   })
 
@@ -199,15 +221,32 @@ local function setup_autocmds(session)
       -- Cancel actual insertion; we manage cursor + highlights ourselves
       vim.v.char = ""
 
-      if tag == 'eof' then
+      -- Always handle newline key by moving to next line start; never insert
+      if typed == "\n" then
+        local total = #session.expected_lines
+        if row1 < total then
+          local nr = row1 + 1
+          local target_col = 0
+          if session.config.auto_tab ~= false then
+            local next_line = session.expected_lines[nr]
+            if next_line then
+              for i = 1, #next_line do
+                local ch = next_line:sub(i, i)
+                if ch == ' ' or ch == '\t' then
+                  mark_char(session, nr - 1, i - 1, 'correct')
+                  target_col = i
+                else
+                  break
+                end
+              end
+            end
+          end
+          set_cursor(win, nr, target_col)
+        end
         return
       end
 
-      if tag == 'nl' then
-        if typed == "\n" then
-          local nr, _ = advance_cursor(session, row1, col0)
-          set_cursor(win, nr, 0)
-        end
+      if tag == 'eof' then
         return
       end
 
@@ -224,20 +263,33 @@ local function setup_autocmds(session)
     end,
   })
 
-  -- Also map <CR> to prevent real newline insertion in edge cases
-  local function handle_cr()
-    local win = session.practice_win
-    local row1, col0 = get_cursor(win)
-    local _, tag = expected_at(session, row1, col0)
-    if tag == 'nl' then
-      local nr, _ = advance_cursor(session, row1, col0)
-      set_cursor(win, nr, 0)
-    end
-  end
+  -- Map <CR> to always move to next line start and optionally skip indent
+  -- Use non-expr mapping to reliably swallow <CR> and apply side effects.
   vim.keymap.set('i', '<CR>', function()
-    handle_cr()
-    return ''
-  end, { buffer = buf, nowait = true, silent = true, expr = true })
+    local win = session.practice_win
+    local row1, _ = get_cursor(win)
+    local total = #session.expected_lines
+    if row1 < total then
+      local nr = row1 + 1
+      local target_col = 0
+      if session.config.auto_tab ~= false then
+        local next_line = session.expected_lines[nr]
+        if next_line then
+          for i = 1, #next_line do
+            local ch = next_line:sub(i, i)
+            if ch == ' ' or ch == '\t' then
+              mark_char(session, nr - 1, i - 1, 'correct')
+              target_col = i
+            else
+              break
+            end
+          end
+        end
+      end
+      set_cursor(win, nr, target_col)
+    end
+    -- Do not insert a newline
+  end, { buffer = buf, nowait = true, silent = true })
 
   -- Backspace: move left and clear mark at the previous position
   vim.keymap.set('i', '<BS>', function()
@@ -247,6 +299,13 @@ local function setup_autocmds(session)
     clear_char(session, pr - 1, pc)
     set_cursor(win, pr, pc)
   end, { buffer = buf, nowait = true, silent = true })
+
+  -- Block destructive normal-mode operators to avoid real edits
+  local function nop() end
+  local nopts = { buffer = buf, noremap = true, nowait = true, silent = true }
+  for _, key in ipairs({ 'c', 'd', 's', 'x', 'r', 'R', 'S', 'p', 'P' }) do
+    vim.keymap.set('n', key, nop, nopts)
+  end
 end
 
 function M.start(origin_bufnr, config)
@@ -260,7 +319,7 @@ function M.start(origin_bufnr, config)
   -- Create practice buffer
   local practice_buf = vim.api.nvim_create_buf(false, true) -- unlisted scratch
   vim.api.nvim_buf_set_name(practice_buf, "keymash://practice")
-  vim.api.nvim_set_option_value("buftype", "nofile", { buf = practice_buf })
+  vim.api.nvim_set_option_value("buftype", "acwrite", { buf = practice_buf })
   -- Inherit original filetype to preserve syntax colors
   local origin_ft = vim.api.nvim_get_option_value("filetype", { buf = origin_bufnr })
   vim.api.nvim_set_option_value("filetype", origin_ft ~= '' and origin_ft or 'keymash', { buf = practice_buf })
@@ -276,14 +335,14 @@ function M.start(origin_bufnr, config)
   local cols = vim.o.columns
   local lines = vim.o.lines - vim.o.cmdheight
 
-  -- Backdrop
+  -- Backdrop (fills the screen behind the float)
   local back_buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_set_option_value('buftype', 'nofile', { buf = back_buf })
   vim.api.nvim_set_option_value('bufhidden', 'wipe', { buf = back_buf })
-  vim.api.nvim_set_option_value('modifiable', false, { buf = back_buf })
   local filler = {}
   for _ = 1, lines do table.insert(filler, '') end
   vim.api.nvim_buf_set_lines(back_buf, 0, -1, true, filler)
+  vim.api.nvim_set_option_value('modifiable', false, { buf = back_buf })
   local back_win = vim.api.nvim_open_win(back_buf, false, {
     relative = 'editor', width = cols, height = lines, row = 0, col = 0,
     style = 'minimal', zindex = 50, focusable = false,
@@ -306,9 +365,10 @@ function M.start(origin_bufnr, config)
   vim.api.nvim_set_option_value("relativenumber", false, { win = win })
   vim.api.nvim_set_option_value("list", false, { win = win })
   vim.api.nvim_set_option_value("signcolumn", "no", { win = win })
+  -- keep buffer modifiable for overtype; prevent save prompts
   vim.api.nvim_set_option_value('winblend', 0, { win = win })
-  vim.api.nvim_set_option_value("buflisted", false, { buf = practice_buf })
-  vim.api.nvim_set_option_value("modified", false, { buf = practice_buf })
+  vim.api.nvim_set_option_value('buflisted', false, { buf = practice_buf })
+  vim.api.nvim_set_option_value('modified', false, { buf = practice_buf })
 
   -- Namespaces
   local ns_dim = vim.api.nvim_create_namespace("KeymashDimNS")
@@ -324,7 +384,7 @@ function M.start(origin_bufnr, config)
     ns_dim = ns_dim,
     ns_marks = ns_marks,
     prio_dim = 100,
-    prio_typed = 200,
+    prio_typed = 10000,
     config = config or {},
   }
 
