@@ -52,9 +52,29 @@ require("keymash").setup({
   dim_blend = 70,               -- intensity for dim fallback
   auto_tab = true,              -- treat <Tab>/space as correct when expected is a tab
   auto_scroll = true,           -- keep folds opened as you type (future use)
+  compat = {
+    disable = {
+      mini_pairs = true,        -- disable mini.pairs in practice buffers
+      mini_surround = true,     -- disable mini.surround in practice buffers
+      matchparen = true,        -- disable builtin matchparen (and nvim-matchup pair highlight)
+    },
+    -- Optional hook for custom per-buffer tweaks:
+    -- custom = function(buf)
+    --   -- Example: disable your own plugin locally
+    --   vim.b.some_plugin_disable = true
+    -- end,
+  },
 })
 ```
 All highlight groups include cterm fallbacks and are re-applied on `ColorScheme`.
+
+### Compatibility notes
+- Keymash uses overtype behavior and intercepts `InsertCharPre` to cancel insertion. Some plugins that modify insert behavior (pairs/surround/match) can conflict.
+- By default, Keymash disables in the practice buffer only:
+  - `mini.pairs` via `b:minipairs_disable = true`
+  - `mini.surround` via `b:minisurround_disable = true`
+  - `matchparen` via `:NoMatchParen` (and `b:matchup_matchparen_enabled = 0` if nvim-matchup is installed)
+- You can opt out of any of these by setting the corresponding flag to `false` in `compat.disable`, or add your own `compat.custom(buf)` to tweak more plugins per buffer.
 
 ## How It Works
 - Captures the current buffer’s text and opens a scratch practice buffer

@@ -394,6 +394,11 @@ function M.start(origin_bufnr, config)
   -- Initial visuals
   dim_buffer(session)
 
+  -- Apply per-buffer compatibility toggles (disable conflicting plugins/features)
+  pcall(function()
+    require('keymash.compat').apply(practice_buf, session.config.compat)
+  end)
+
   setup_autocmds(session)
 end
 

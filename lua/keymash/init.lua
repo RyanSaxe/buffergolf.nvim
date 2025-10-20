@@ -10,6 +10,14 @@ local default_config = {
   dim_blend = 70,
   auto_tab = true,
   auto_scroll = true,
+  compat = {
+    disable = {
+      mini_pairs = true,
+      mini_surround = true,
+      matchparen = true, -- also disables nvim-matchup matchparen if present
+    },
+    -- custom = function(buf) end, -- user hook per practice buffer (optional)
+  },
 }
 
 local configured = false
