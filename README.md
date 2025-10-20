@@ -5,8 +5,8 @@ Practice re-typing any buffer from scratch inside a dedicated scratch buffer. Th
 ## Features
 - Scratch buffer mirrors the source filetype but starts empty
 - Reference text displayed as inline ghost text (per-line preview)
-- Divergent characters are highlighted with a customizable group (red + underline by default)
-- Diagnostics and other ghost text sources (cmp, Copilot) disabled inside the practice buffer
+- Divergent characters are highlighted with a customizable group (red + underline by default) while the reference character still appears inline
+- LSP diagnostics muted, while the guard ensures only this plugin’s ghost text renders (completion popups still work)
 - Buffer is marked `buftype=nofile` so it cannot be written accidentally
 
 ## Requirements
@@ -48,16 +48,31 @@ What happens when you start a session:
 require("keymash").setup({
   ghost_hl = "BuffergolfGhost",          -- highlight for reference ghost text (defaults link to Comment)
   mismatch_hl = "BuffergolfMismatch",    -- highlight for mismatched characters (defaults red + underline)
-  disable_diagnostics = true,            -- disable LSP diagnostics in the practice buffer
-  disable_external_ghost = true,         -- turn off common ghost text providers (cmp, Copilot, etc.)
+  disable_diagnostics = true,            -- disable diagnostics/inlay hints inside the practice buffer
+  disable_matchparen = true,             -- remove MatchParen highlight to keep ghost text clean
+  ghost_guard = {
+    allow = { "cmp" },                   -- optional namespace substrings to allow (besides BuffergolfGhostNS)
+    -- set to false to leave all other ghost text untouched
+  },
 })
 ```
 Both highlight groups include cterm fallbacks and are re-applied on `ColorScheme`.
 
 ### Compatibility notes
 - Typing happens in a normal modifiable buffer—no more overtype tricks or blocked normal-mode operators.
-- When `disable_external_ghost` is `true`, the buffer sets common `b:*` flags to disable nvim-cmp ghost text and GitHub Copilot inline suggestions. If your setup uses a different namespace, add your own tweak via an autocmd on `User KeymashStarted` (planned) or by editing `session.lua`.
-- Diagnostics are disabled per-buffer so LSP servers do not flood the buffer with warnings as you type.
+- By default the guard blocks all inline virtual text except this plugin’s namespace. Populate `ghost_guard.allow` with substrings (e.g. `"cmp"`, `"blink_cmp_ghost_text"`) to permit other providers.
+- Set `ghost_guard = false` if you want to disable the interception entirely (other plugins’ ghost text will render as usual). Consider also toggling `disable_diagnostics`.
+- MatchParen highlighting is disabled by default inside the practice buffer so the inline comparison remains legible.
+- Diagnostics are disabled by default so LSP servers do not flood the buffer with warnings as you type.
+
+#### Example: allow blink.cmp ghost text
+```lua
+require("keymash").setup({
+  ghost_guard = {
+    allow = { "blink_cmp_ghost_text" },
+  },
+})
+```
 
 ## How It Works
 - Captures the current buffer’s contents as reference lines

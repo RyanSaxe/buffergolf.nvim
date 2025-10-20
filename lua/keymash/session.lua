@@ -1,3 +1,5 @@
+local ghost_guard = require("ghost_guard_buf")
+
 local M = {}
 
 local sessions_by_origin = {}
@@ -111,8 +113,14 @@ local function refresh_visuals(session)
       )
     end
 
-    local ghost = reference:sub(prefix + 1)
-    set_ghost_mark(session, row, prefix, ghost)
+    local ghost_start_index = prefix + 1
+    local ghost = ""
+    if ghost_start_index <= #reference then
+      ghost = reference:sub(ghost_start_index)
+    end
+
+    local ghost_col = #actual
+    set_ghost_mark(session, row, ghost_col, ghost)
   end
 
   -- Remove stale ghost marks if the buffer shrank.
@@ -129,11 +137,64 @@ local function disable_diagnostics(bufnr)
   end
 end
 
-local function disable_external_ghost(bufnr)
-  pcall(vim.api.nvim_buf_set_var, bufnr, "cmp_enabled", false)
-  pcall(vim.api.nvim_buf_set_var, bufnr, "cmp_disable", true)
-  pcall(vim.api.nvim_buf_set_var, bufnr, "copilot_enabled", false)
-  pcall(vim.api.nvim_buf_set_var, bufnr, "avante_virtual_text_disabled", true)
+local function disable_matchparen(session)
+  if session.config.disable_matchparen == false then
+    return
+  end
+
+  local win = session.practice_win
+  if not win_valid(win) then
+    return
+  end
+
+  local ok, current = pcall(vim.api.nvim_get_option_value, "winhighlight", { win = win })
+  local value = ok and current or ""
+  if value ~= "" then
+    if value:match("MatchParen:") then
+      value = value:gsub("MatchParen:[^,%s]+", "MatchParen:None")
+    else
+      value = value .. ",MatchParen:None"
+    end
+  else
+    value = "MatchParen:None"
+  end
+  vim.api.nvim_set_option_value("winhighlight", value, { win = win })
+
+  pcall(vim.api.nvim_buf_set_var, session.practice_buf, "matchup_matchparen_enabled", 0)
+end
+
+local function enable_ghost_guard(session)
+  local cfg = session.config.ghost_guard
+  if cfg == false then
+    if session.config.disable_diagnostics ~= false then
+      disable_diagnostics(session.practice_buf)
+    end
+    return
+  end
+
+  local allow = { "BuffergolfGhostNS" }
+  if type(cfg) == "table" and type(cfg.allow) == "table" then
+    for _, needle in ipairs(cfg.allow) do
+      if type(needle) == "string" then
+        table.insert(allow, needle)
+      end
+    end
+  end
+
+  local disable_diag = session.config.disable_diagnostics ~= false
+
+  ghost_guard.enable(session.practice_buf, {
+    allow = allow,
+    disable_diagnostics = disable_diag,
+  })
+  session.guard_enabled = true
+end
+
+local function disable_ghost_guard(session)
+  if session.guard_enabled then
+    ghost_guard.disable(session.practice_buf)
+    session.guard_enabled = nil
+  end
 end
 
 local function clear_state(session)
@@ -168,6 +229,7 @@ local function setup_autocmds(session)
     group = aug,
     buffer = session.practice_buf,
     callback = function()
+      disable_ghost_guard(session)
       clear_state(session)
     end,
   })
@@ -211,6 +273,7 @@ function M.start(origin_bufnr, config)
   local session = {
     origin_buf = origin_bufnr,
     origin_win = current_win,
+    practice_win = current_win,
     practice_buf = practice_buf,
     reference_lines = reference,
     config = config or {},
@@ -223,13 +286,8 @@ function M.start(origin_bufnr, config)
   sessions_by_origin[origin_bufnr] = session
   sessions_by_practice[practice_buf] = session
 
-  if config.disable_diagnostics ~= false then
-    disable_diagnostics(practice_buf)
-  end
-
-  if config.disable_external_ghost ~= false then
-    disable_external_ghost(practice_buf)
-  end
+  disable_matchparen(session)
+  enable_ghost_guard(session)
 
   setup_autocmds(session)
   refresh_visuals(session)
@@ -250,6 +308,8 @@ function M.stop(bufnr)
   elseif buf_valid(origin_buf) then
     vim.api.nvim_set_current_buf(origin_buf)
   end
+
+  disable_ghost_guard(session)
 
   if buf_valid(practice_buf) then
     vim.api.nvim_buf_delete(practice_buf, { force = true })
