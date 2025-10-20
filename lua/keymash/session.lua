@@ -301,10 +301,15 @@ local function setup_autocmds(session)
   end, { buffer = buf, nowait = true, silent = true })
 
   -- Block destructive normal-mode operators to avoid real edits
-  local function nop() end
+  local function make_disabled_handler(key)
+    return function()
+      vim.notify(("Keymash practice buffer blocks %q to prevent edits."):format(key), vim.log.levels.INFO, { title = "Keymash" })
+    end
+  end
+
   local nopts = { buffer = buf, noremap = true, nowait = true, silent = true }
   for _, key in ipairs({ 'c', 'd', 's', 'x', 'r', 'R', 'S', 'p', 'P' }) do
-    vim.keymap.set('n', key, nop, nopts)
+    vim.keymap.set('n', key, make_disabled_handler(key), nopts)
   end
 end
 
@@ -396,7 +401,7 @@ function M.start(origin_bufnr, config)
 
   -- Apply per-buffer compatibility toggles (disable conflicting plugins/features)
   pcall(function()
-    require('keymash.compat').apply(practice_buf, session.config.compat)
+    require('keymash.compat').apply(practice_buf, win, session.config.compat)
   end)
 
   setup_autocmds(session)

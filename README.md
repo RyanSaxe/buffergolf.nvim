@@ -56,7 +56,7 @@ require("keymash").setup({
     disable = {
       mini_pairs = true,        -- disable mini.pairs in practice buffers
       mini_surround = true,     -- disable mini.surround in practice buffers
-      matchparen = true,        -- disable builtin matchparen (and nvim-matchup pair highlight)
+      matchparen = true,        -- suppress MatchParen highlight in practice window (and disable nvim-matchup pair highlight)
     },
     -- Optional hook for custom per-buffer tweaks:
     -- custom = function(buf)
@@ -73,8 +73,27 @@ All highlight groups include cterm fallbacks and are re-applied on `ColorScheme`
 - By default, Keymash disables in the practice buffer only:
   - `mini.pairs` via `b:minipairs_disable = true`
   - `mini.surround` via `b:minisurround_disable = true`
-  - `matchparen` via `:NoMatchParen` (and `b:matchup_matchparen_enabled = 0` if nvim-matchup is installed)
+  - `matchparen` by remapping `MatchParen` highlight to `NONE` for the practice window (and `b:matchup_matchparen_enabled = 0` if nvim-matchup is installed)
 - You can opt out of any of these by setting the corresponding flag to `false` in `compat.disable`, or add your own `compat.custom(buf)` to tweak more plugins per buffer.
+
+#### Opting out or adding your own tweaks
+```lua
+require("keymash").setup({
+  compat = {
+    disable = {
+      mini_pairs = false,           -- keep mini.pairs enabled
+      mini_surround = true,
+      matchparen = false,           -- keep builtin matchparen highlighting
+    },
+    custom = function(buf)
+      -- Example: disable nvim-autopairs only inside the practice buffer
+      vim.api.nvim_buf_set_var(buf, "autopairs_enabled", false)
+      -- Or toggle lexima.vim:
+      -- vim.b.lexima_disabled = 1
+    end,
+  },
+})
+```
 
 ## How It Works
 - Captures the current buffer’s text and opens a scratch practice buffer
