@@ -135,106 +135,85 @@ local function set_ghost_mark(session, row, col, text, actual)
   session.ghost_marks[row] = id
 end
 
-local refresh_visuals
-
-local function schedule_refresh(session)
-  if session.refresh_scheduled then
-    return
-  end
-
-  session.refresh_scheduled = true
-
-  vim.schedule(function()
-    session.refresh_scheduled = false
-    if not buf_valid(session.practice_buf) then
-      return
-    end
-    if sessions_by_practice[session.practice_buf] ~= session then
-      return
-    end
-    refresh_visuals(session)
-  end)
-end
-
-refresh_visuals = function(session)
+local function refresh_visuals(session)
   if session.refreshing then
     return
   end
 
   session.refreshing = true
 
-  repeat
-    if not buf_valid(session.practice_buf) then
-      break
-    end
-
-    ensure_line_count(session)
-
-    local bufnr = session.practice_buf
-    local actual_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, true)
-    local total = math.max(#actual_lines, #session.reference_lines)
-
-    for row = 1, total do
-      local actual = actual_lines[row]
-      if actual == nil then
-        -- Extend buffer so the ghost text can attach to this row.
-        vim.api.nvim_buf_set_lines(bufnr, row - 1, row - 1, true, { "" })
-        actual = ""
-        actual_lines[row] = actual
+  local ok, err = pcall(function()
+    repeat
+      if not buf_valid(session.practice_buf) then
+        break
       end
 
-      local reference = session.reference_lines[row] or ""
-      local prefix = 0
-      local matching = math.min(#actual, #reference)
+      ensure_line_count(session)
 
-      while prefix < matching do
-        local from = prefix + 1
-        if actual:sub(from, from) ~= reference:sub(from, from) then
-          break
+      local bufnr = session.practice_buf
+      local actual_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, true)
+      local total = math.max(#actual_lines, #session.reference_lines)
+
+      for row = 1, total do
+        local actual = actual_lines[row] or ""
+
+        local reference = session.reference_lines[row] or ""
+        local prefix = 0
+        local matching = math.min(#actual, #reference)
+
+        while prefix < matching do
+          local from = prefix + 1
+          if actual:sub(from, from) ~= reference:sub(from, from) then
+            break
+          end
+          prefix = prefix + 1
         end
-        prefix = prefix + 1
-      end
 
-      local mismatch_start = prefix
-      local mismatch_finish = #actual
+        local mismatch_start = prefix
+        local mismatch_finish = #actual
 
-      vim.api.nvim_buf_clear_namespace(bufnr, session.ns_mismatch, row - 1, row)
-      clear_ghost_mark(session, row)
-
-      if mismatch_finish > mismatch_start then
-        vim.api.nvim_buf_add_highlight(
-          bufnr,
-          session.ns_mismatch,
-          session.config.mismatch_hl,
-          row - 1,
-          mismatch_start,
-          mismatch_finish
-        )
-      end
-
-      local ghost_start_index = prefix + 1
-      local ghost = ""
-      if ghost_start_index <= #reference then
-        ghost = reference:sub(ghost_start_index)
-      end
-
-      local ghost_col = #actual
-      set_ghost_mark(session, row, ghost_col, ghost, actual)
-    end
-
-    -- Remove stale ghost marks if the buffer shrank.
-    if #session.ghost_marks > total then
-      for row = total + 1, #session.ghost_marks do
+        vim.api.nvim_buf_clear_namespace(bufnr, session.ns_mismatch, row - 1, row)
         clear_ghost_mark(session, row)
-      end
-    end
-  until true
 
-  if buf_valid(session.practice_buf) then
-    pcall(vim.api.nvim_set_option_value, "modified", false, { buf = session.practice_buf })
-  end
+        if mismatch_finish > mismatch_start then
+          vim.api.nvim_buf_add_highlight(
+            bufnr,
+            session.ns_mismatch,
+            session.config.mismatch_hl,
+            row - 1,
+            mismatch_start,
+            mismatch_finish
+          )
+        end
+
+        local ghost_start_index = prefix + 1
+        local ghost = ""
+        if ghost_start_index <= #reference then
+          ghost = reference:sub(ghost_start_index)
+        end
+
+        local ghost_col = #actual
+        set_ghost_mark(session, row, ghost_col, ghost, actual)
+      end
+
+      -- Remove stale ghost marks if the buffer shrank.
+      if #session.ghost_marks > total then
+        for row = total + 1, #session.ghost_marks do
+          clear_ghost_mark(session, row)
+        end
+      end
+    until true
+
+    if buf_valid(session.practice_buf) then
+      pcall(vim.api.nvim_set_option_value, "modified", false, { buf = session.practice_buf })
+    end
+  end)
 
   session.refreshing = false
+
+  if not ok then
+    vim.notify("Buffergolf refresh error: " .. tostring(err), vim.log.levels.ERROR)
+  end
 end
 
 local function attach_change_watcher(session)
@@ -256,7 +235,7 @@ local function attach_change_watcher(session)
       if sessions_by_practice[buf] ~= session then
         return true
       end
-      schedule_refresh(session)
+      refresh_visuals(session)
     end,
     on_bytes = function(_, buf, _, _, _, _, _, _)
       if session.refreshing then
@@ -268,7 +247,7 @@ local function attach_change_watcher(session)
       if sessions_by_practice[buf] ~= session then
         return true
       end
-      schedule_refresh(session)
+      refresh_visuals(session)
     end,
     on_detach = function()
       session.change_attached = nil
@@ -303,6 +282,13 @@ local function disable_inlay_hints(bufnr)
   end
 end
 
+local function disable_autopairs(bufnr)
+  -- Disable nvim-autopairs
+  pcall(vim.api.nvim_buf_set_var, bufnr, "autopairs_enabled", false)
+  -- Disable mini.pairs
+  pcall(vim.api.nvim_buf_set_var, bufnr, "minipairs_disable", true)
+end
+
 local function apply_buffer_defaults(session)
   local buf = session.practice_buf
 
@@ -311,6 +297,9 @@ local function apply_buffer_defaults(session)
   end
   if session.config.disable_inlay_hints ~= false then
     disable_inlay_hints(buf)
+  end
+  if session.config.disable_autopairs ~= false then
+    disable_autopairs(buf)
   end
 end
 
@@ -347,7 +336,6 @@ local function clear_state(session)
     pcall(vim.api.nvim_buf_detach, session.practice_buf)
   end
   session.change_attached = nil
-  session.refresh_scheduled = nil
   session.refreshing = nil
   if session.augroup then
     pcall(vim.api.nvim_del_augroup_by_id, session.augroup)
@@ -357,14 +345,6 @@ end
 local function setup_autocmds(session)
   local aug = vim.api.nvim_create_augroup(("BuffergolfSession_%d"):format(session.practice_buf), { clear = true })
   session.augroup = aug
-
-  vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI", "InsertLeave" }, {
-    group = aug,
-    buffer = session.practice_buf,
-    callback = function()
-      schedule_refresh(session)
-    end,
-  })
 
   vim.api.nvim_create_autocmd("BufEnter", {
     group = aug,
@@ -409,6 +389,42 @@ local function setup_autocmds(session)
   })
 end
 
+local function normalize_reference_lines(lines, bufnr)
+  -- If expandtab is on, convert tabs to spaces in reference lines
+  -- This ensures byte-by-byte comparison works with autoindent
+  local ok, expandtab = pcall(vim.api.nvim_get_option_value, "expandtab", { buf = bufnr })
+  if not ok or not expandtab then
+    return lines
+  end
+
+  local ok_ts, tabstop = pcall(vim.api.nvim_get_option_value, "tabstop", { buf = bufnr })
+  if not ok_ts then
+    tabstop = 8
+  end
+
+  local normalized = {}
+  for _, line in ipairs(lines) do
+    if line:find("\t") then
+      local result = {}
+      local col = 0
+      for char in line:gmatch(".") do
+        if char == "\t" then
+          local spaces = tabstop - (col % tabstop)
+          table.insert(result, string.rep(" ", spaces))
+          col = col + spaces
+        else
+          table.insert(result, char)
+          col = col + 1
+        end
+      end
+      table.insert(normalized, table.concat(result))
+    else
+      table.insert(normalized, line)
+    end
+  end
+  return normalized
+end
+
 function M.start(origin_bufnr, config)
   if sessions_by_origin[origin_bufnr] then
     return
@@ -418,6 +434,9 @@ function M.start(origin_bufnr, config)
   if #reference == 0 then
     reference = { "" }
   end
+
+  -- Normalize tabs to spaces if expandtab is on
+  reference = normalize_reference_lines(reference, origin_bufnr)
 
   local practice_buf = vim.api.nvim_create_buf(false, false)
   vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = practice_buf })
@@ -445,6 +464,10 @@ function M.start(origin_bufnr, config)
 
   local current_win = vim.api.nvim_get_current_win()
   pcall(vim.api.nvim_buf_set_var, practice_buf, "buffergolf_practice", true)
+  pcall(vim.api.nvim_buf_set_var, practice_buf, "copilot_enabled", false)
+  pcall(vim.api.nvim_buf_set_var, practice_buf, "copilot_suggestion_auto_trigger", false)
+  pcall(vim.api.nvim_buf_set_var, practice_buf, "autopairs_enabled", false)
+  pcall(vim.api.nvim_buf_set_var, practice_buf, "minipairs_disable", true)
 
   local session = {
     origin_buf = origin_bufnr,
