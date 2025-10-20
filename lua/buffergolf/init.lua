@@ -10,6 +10,7 @@ local default_config = {
 	disable_matchparen = true,
 	keymaps = {
 		toggle = "<leader>bg",
+		countdown = "<leader>bG",
 	},
 }
 
@@ -69,9 +70,25 @@ function M.setup(opts)
 		M.stop()
 	end, { desc = "Stop buffergolf practice buffer" })
 
+	vim.api.nvim_create_user_command("BuffergolfCountdown", function()
+		M.start_countdown()
+	end, { desc = "Start countdown timer for buffergolf practice buffer" })
+
+	vim.api.nvim_create_user_command("BuffergolfDebug", function()
+		M.debug()
+	end, { desc = "Show buffergolf debug information" })
+
 	if toggle_key and toggle_key ~= "" then
 		vim.keymap.set("n", toggle_key, M.toggle, {
 			desc = "Toggle buffergolf practice buffer",
+			silent = true,
+		})
+	end
+
+	local countdown_key = keymaps.countdown
+	if countdown_key and countdown_key ~= "" then
+		vim.keymap.set("n", countdown_key, M.start_countdown, {
+			desc = "Start countdown timer",
 			silent = true,
 		})
 	end
@@ -94,6 +111,61 @@ end
 
 function M.stop()
 	Session.stop(vim.api.nvim_get_current_buf())
+end
+
+function M.start_countdown()
+	local bufnr = vim.api.nvim_get_current_buf()
+
+	vim.ui.input({ prompt = "Countdown duration (seconds): " }, function(input)
+		if not input or input == "" then
+			return
+		end
+
+		local seconds = tonumber(input)
+		if not seconds or seconds <= 0 then
+			vim.notify("Invalid duration. Please enter a positive number.", vim.log.levels.ERROR, { title = "buffergolf" })
+			return
+		end
+
+		-- Check if there's already an active session
+		if Session.is_active(bufnr) then
+			-- Just switch to countdown mode
+			Session.start_countdown(bufnr, seconds)
+		else
+			-- Start a new session first, then switch to countdown
+			Session.start(bufnr, M.config)
+			-- Get the new practice buffer number (session switched buffers)
+			local new_bufnr = vim.api.nvim_get_current_buf()
+			Session.start_countdown(new_bufnr, seconds)
+		end
+	end)
+end
+
+function M.debug()
+	local bufnr = vim.api.nvim_get_current_buf()
+	local debug_info = Session.get_debug_info(bufnr)
+
+	if not debug_info then
+		vim.notify("No active buffergolf session in current buffer", vim.log.levels.WARN, { title = "buffergolf" })
+		return
+	end
+
+	local msg = string.format(
+		"Buffergolf Debug Info:\n" ..
+		"  Practice buffer: %d\n" ..
+		"  Origin buffer: %d\n" ..
+		"  Attached: %s\n" ..
+		"  Refreshing: %s\n" ..
+		"  Buffer valid: %s\n" ..
+		"\nCheck debug.log in plugin directory for detailed logs",
+		debug_info.practice_buf,
+		debug_info.origin_buf,
+		tostring(debug_info.change_attached),
+		tostring(debug_info.refreshing),
+		tostring(debug_info.buf_valid)
+	)
+
+	vim.notify(msg, vim.log.levels.INFO, { title = "buffergolf" })
 end
 
 return M
