@@ -22,6 +22,7 @@ function M.init_session(session)
   active_sessions[practice_buf] = {
     count = 0,
     debug_keys = {}, -- for debugging
+    tracking_enabled = true,  -- Add tracking control flag
   }
 
   -- Create namespace for this session's vim.on_key handler
@@ -62,14 +63,17 @@ function M.init_session(session)
     -- APPROACH 1: Command depth tracking
     -- Only count if this is the start of a new command sequence
     if command_depth == 0 then
-      -- This is a user-initiated keystroke
-      state.count = state.count + 1
-      table.insert(state.debug_keys, string.format("[%d] %s", state.count, key_name))
-      if #state.debug_keys > 30 then
-        table.remove(state.debug_keys, 1)
+      -- Only increment count if tracking is enabled
+      if state.tracking_enabled then
+        -- This is a user-initiated keystroke
+        state.count = state.count + 1
+        table.insert(state.debug_keys, string.format("[%d] %s", state.count, key_name))
+        if #state.debug_keys > 30 then
+          table.remove(state.debug_keys, 1)
+        end
       end
 
-      -- Increment depth to mark we're in a command
+      -- Always increment depth to mark we're in a command (regardless of tracking)
       command_depth = command_depth + 1
 
       -- Reset depth after 50ms (most vim operations complete within this)
@@ -200,6 +204,28 @@ function M.get_debug_keys(session)
 
   local state = active_sessions[session.practice_buf]
   return state and state.debug_keys or nil
+end
+
+-- Set tracking enabled state for a session
+function M.set_tracking_enabled(session, enabled)
+  if not session or not session.practice_buf then
+    return
+  end
+
+  local state = active_sessions[session.practice_buf]
+  if state then
+    state.tracking_enabled = enabled
+  end
+end
+
+-- Get tracking enabled state for a session
+function M.is_tracking_enabled(session)
+  if not session or not session.practice_buf then
+    return false
+  end
+
+  local state = active_sessions[session.practice_buf]
+  return state and state.tracking_enabled or false
 end
 
 return M

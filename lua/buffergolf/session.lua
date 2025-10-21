@@ -3,6 +3,30 @@ local keystroke = require("buffergolf.keystroke")
 
 local M = {}
 
+-- Helper function to temporarily disable keystroke tracking
+-- Usage: with_keys_disabled(session, function() ... end)
+local function with_keys_disabled(session, fn)
+  if not session then
+    return fn()
+  end
+
+  local was_enabled = keystroke.is_tracking_enabled(session)
+  keystroke.set_tracking_enabled(session, false)
+
+  local ok, result = pcall(fn)
+
+  -- Re-enable if it was enabled before
+  if was_enabled then
+    keystroke.set_tracking_enabled(session, true)
+  end
+
+  if not ok then
+    error(result)
+  end
+
+  return result
+end
+
 local sessions_by_origin = {}
 local sessions_by_practice = {}
 
@@ -509,6 +533,105 @@ local function create_reference_window(session)
   return ref_buf, ref_win
 end
 
+-- Synchronized hunk navigation for golf mode
+local function goto_hunk_sync(session, direction)
+  if not session or not session.reference_buf or not session.practice_buf then
+    return
+  end
+
+  -- Check if mini.diff is available
+  local ok, minidiff = pcall(require, 'mini.diff')
+  if not ok then
+    return
+  end
+
+  -- Wrap in with_keys_disabled to prevent counting navigation
+  with_keys_disabled(session, function()
+    -- Get current window before navigation
+    local orig_win = vim.api.nvim_get_current_win()
+
+    -- Navigate to hunk in reference buffer
+    local ref_win = session.reference_win
+    if win_valid(ref_win) then
+      vim.api.nvim_set_current_win(ref_win)
+
+      -- Use mini.diff's goto_hunk function
+      local goto_ok = pcall(minidiff.goto_hunk, direction)
+
+      if goto_ok then
+        -- Get the line number we navigated to in reference buffer
+        local ref_line = vim.api.nvim_win_get_cursor(ref_win)[1]
+
+        -- Get the diff data to understand the hunks
+        local buf_data = minidiff.get_buf_data(session.reference_buf)
+
+        if buf_data and buf_data.hunks then
+          -- Calculate the corresponding line in practice buffer
+          -- by accounting for additions/deletions
+          local practice_line = ref_line
+          local line_offset = 0
+
+          -- Process hunks that come before the current line
+          for _, hunk in ipairs(buf_data.hunks) do
+            if hunk.buf_start and hunk.buf_start < ref_line then
+              -- This hunk is before our current position
+              -- Calculate the offset based on the difference in line counts
+              local buf_lines = hunk.buf_count or 0
+              local ref_lines = hunk.ref_count or 0
+
+              -- The offset is the difference between reference and buffer lines
+              -- (reference = practice buffer, buffer = reference buffer in this context)
+              line_offset = line_offset + (ref_lines - buf_lines)
+
+              -- If we're inside this hunk, adjust position
+              if hunk.buf_start <= ref_line and ref_line < hunk.buf_start + buf_lines then
+                -- We're inside the hunk, map to the corresponding position
+                local hunk_position = ref_line - hunk.buf_start
+                practice_line = (hunk.ref_start or 1) + hunk_position + line_offset
+                break
+              end
+            else
+              -- We've passed the current line position
+              break
+            end
+          end
+
+          -- If we didn't find the line inside a hunk, apply accumulated offset
+          if line_offset ~= 0 then
+            practice_line = ref_line + line_offset
+          end
+
+          -- Ensure practice_line is within valid bounds
+          local practice_lines = vim.api.nvim_buf_line_count(session.practice_buf)
+          practice_line = math.max(1, math.min(practice_line, practice_lines))
+
+          -- Synchronize practice buffer to calculated line
+          vim.api.nvim_set_current_win(orig_win)
+          vim.api.nvim_win_set_cursor(orig_win, {practice_line, 0})
+          vim.cmd('normal! zz')
+        else
+          -- Fallback to simple line matching if no hunk data
+          vim.api.nvim_set_current_win(orig_win)
+          local practice_lines = vim.api.nvim_buf_line_count(session.practice_buf)
+          local target_line = math.min(ref_line, practice_lines)
+          vim.api.nvim_win_set_cursor(orig_win, {target_line, 0})
+          vim.cmd('normal! zz')
+        end
+
+        -- Center the reference window
+        vim.api.nvim_set_current_win(ref_win)
+        vim.cmd('normal! zz')
+
+        -- Return to original window
+        vim.api.nvim_set_current_win(orig_win)
+      else
+        -- Return to original window even if navigation failed
+        vim.api.nvim_set_current_win(orig_win)
+      end
+    end
+  end)
+end
+
 local function setup_mini_diff_for_golf(session)
   -- Check if mini.diff is available
   local ok, minidiff = pcall(require, 'mini.diff')
@@ -549,6 +672,13 @@ local function setup_mini_diff_for_golf(session)
   local practice_lines = vim.api.nvim_buf_get_lines(session.practice_buf, 0, -1, false)
   minidiff.set_ref_text(session.reference_buf, practice_lines)
 
+  -- Enable overlay by default for better diff visualization
+  vim.defer_fn(function()
+    if buf_valid(session.reference_buf) then
+      minidiff.toggle_overlay(session.reference_buf)
+    end
+  end, 100) -- Small delay to ensure buffer is ready
+
   -- Store mini.diff state in session for updates
   session.minidiff_enabled = true
 
@@ -563,6 +693,85 @@ local function setup_mini_diff_for_golf(session)
 
   -- Add to the session's refresh callback
   session.update_mini_diff = update_diff
+end
+
+-- Set up buffer-local commands and keymaps for golf mode navigation
+local function setup_golf_navigation(session)
+  if not session or not session.practice_buf then
+    return
+  end
+
+  -- Get config keymaps (with defaults)
+  local config = session.config or {}
+  local keymaps = config.keymaps and config.keymaps.golf_mode or {}
+
+  -- Default keymaps
+  local defaults = {
+    next_hunk = "]h",
+    prev_hunk = "[h",
+    first_hunk = "[H",
+    last_hunk = "]H",
+    toggle_overlay = "<leader>do",
+  }
+
+  -- Merge with user config
+  for key, default in pairs(defaults) do
+    if keymaps[key] == nil then
+      keymaps[key] = default
+    end
+  end
+
+  -- Create buffer-local user commands
+  vim.api.nvim_buf_create_user_command(session.practice_buf, "BuffergolfNextHunk", function()
+    goto_hunk_sync(session, "next")
+  end, { desc = "Go to next diff hunk (synchronized)" })
+
+  vim.api.nvim_buf_create_user_command(session.practice_buf, "BuffergolfPrevHunk", function()
+    goto_hunk_sync(session, "prev")
+  end, { desc = "Go to previous diff hunk (synchronized)" })
+
+  vim.api.nvim_buf_create_user_command(session.practice_buf, "BuffergolfFirstHunk", function()
+    goto_hunk_sync(session, "first")
+  end, { desc = "Go to first diff hunk (synchronized)" })
+
+  vim.api.nvim_buf_create_user_command(session.practice_buf, "BuffergolfLastHunk", function()
+    goto_hunk_sync(session, "last")
+  end, { desc = "Go to last diff hunk (synchronized)" })
+
+  vim.api.nvim_buf_create_user_command(session.practice_buf, "BuffergolfToggleOverlay", function()
+    local ok, minidiff = pcall(require, 'mini.diff')
+    if ok and session.reference_buf and buf_valid(session.reference_buf) then
+      minidiff.toggle_overlay(session.reference_buf)
+    end
+  end, { desc = "Toggle mini.diff overlay" })
+
+  -- Set up buffer-local keymaps (only if not empty string)
+  local opts = { buffer = session.practice_buf, silent = true }
+
+  if keymaps.next_hunk and keymaps.next_hunk ~= "" then
+    vim.keymap.set("n", keymaps.next_hunk, "<cmd>BuffergolfNextHunk<cr>",
+      vim.tbl_extend("force", opts, { desc = "BufferGolf: Next hunk" }))
+  end
+
+  if keymaps.prev_hunk and keymaps.prev_hunk ~= "" then
+    vim.keymap.set("n", keymaps.prev_hunk, "<cmd>BuffergolfPrevHunk<cr>",
+      vim.tbl_extend("force", opts, { desc = "BufferGolf: Previous hunk" }))
+  end
+
+  if keymaps.first_hunk and keymaps.first_hunk ~= "" then
+    vim.keymap.set("n", keymaps.first_hunk, "<cmd>BuffergolfFirstHunk<cr>",
+      vim.tbl_extend("force", opts, { desc = "BufferGolf: First hunk" }))
+  end
+
+  if keymaps.last_hunk and keymaps.last_hunk ~= "" then
+    vim.keymap.set("n", keymaps.last_hunk, "<cmd>BuffergolfLastHunk<cr>",
+      vim.tbl_extend("force", opts, { desc = "BufferGolf: Last hunk" }))
+  end
+
+  if keymaps.toggle_overlay and keymaps.toggle_overlay ~= "" then
+    vim.keymap.set("n", keymaps.toggle_overlay, "<cmd>BuffergolfToggleOverlay<cr>",
+      vim.tbl_extend("force", opts, { desc = "BufferGolf: Toggle diff overlay" }))
+  end
 end
 
 local function normalize_reference_lines(lines, bufnr)
@@ -756,6 +965,7 @@ function M.start_golf(origin_bufnr, start_lines, target_lines, config)
   -- Create reference window and set up mini.diff for visualization
   create_reference_window(session)
   setup_mini_diff_for_golf(session)
+  setup_golf_navigation(session)  -- Add navigation commands and keymaps
 
   timer.init(session)
   refresh_visuals(session)

@@ -43,6 +43,7 @@ The keystroke tracking uses a "command depth" approach with a timer to filter ou
 ## Requirements
 
 - Neovim 0.11+
+- [mini.diff](https://github.com/nvim-mini/mini.diff) (required for golf mode visualization)
 
 ## Installation
 
@@ -54,8 +55,17 @@ Add to your `~/.config/nvim/lua/plugins/buffergolf.lua`:
 
 ```lua
 return {
-  "ryansaxe/buffergolf.nvim",
-  opts = {},
+  {
+    "nvim-mini/mini.diff",
+    config = function()
+      require('mini.diff').setup()
+    end,
+  },
+  {
+    "ryansaxe/buffergolf.nvim",
+    dependencies = { "nvim-mini/mini.diff" },
+    opts = {},
+  },
 }
 ```
 
@@ -63,21 +73,39 @@ return {
 
 ```lua
 return {
-  "ryansaxe/buffergolf.nvim",
-  opts = {
-    -- Highlight groups
-    ghost_hl = "BuffergolfGhost",
-    mismatch_hl = "BuffergolfMismatch",
+  {
+    "nvim-mini/mini.diff",
+    config = function()
+      require('mini.diff').setup()
+    end,
+  },
+  {
+    "ryansaxe/buffergolf.nvim",
+    dependencies = { "nvim-mini/mini.diff" },
+    opts = {
+      -- Highlight groups
+      ghost_hl = "BuffergolfGhost",
+      mismatch_hl = "BuffergolfMismatch",
 
-    -- Disable distracting features
-    disable_diagnostics = true,
-    disable_inlay_hints = true,
-    disable_matchparen = true,
+      -- Disable distracting features
+      disable_diagnostics = true,
+      disable_inlay_hints = true,
+      disable_matchparen = true,
 
-    -- Keymaps (set to false to disable default keymaps)
-    keymaps = {
-      toggle = "<leader>bg",     -- Toggle practice session
-      countdown = "<leader>bG",  -- Start countdown mode
+      -- Keymaps (set to false to disable default keymaps)
+      keymaps = {
+        toggle = "<leader>bg",     -- Toggle practice session
+        countdown = "<leader>bG",  -- Start countdown mode
+
+        -- Golf mode navigation (only active during golf sessions)
+        golf_mode = {
+          next_hunk = "]h",        -- Go to next diff hunk
+          prev_hunk = "[h",        -- Go to previous diff hunk
+          first_hunk = "[H",       -- Go to first diff hunk
+          last_hunk = "]H",        -- Go to last diff hunk
+          toggle_overlay = "<leader>do", -- Toggle diff overlay
+        },
+      },
     },
   },
 }
@@ -241,11 +269,32 @@ return {
 
 ## Commands
 
+### Global Commands
+
 | Command | Description |
 |---------|-------------|
 | `:Buffergolf` | Toggle practice session for current buffer |
 | `:BuffergolfStop` | Stop active practice session |
 | `:BuffergolfCountdown` | Start countdown timer practice |
+| `:BuffergolfTyping` | Start typing practice (empty starting buffer) |
+
+### Golf Mode Commands
+
+When in golf mode (practicing code transformation), these buffer-local commands are available:
+
+| Command | Description | Default Keymap |
+|---------|-------------|----------------|
+| `:BuffergolfNextHunk` | Navigate to next diff hunk (synchronized) | `]h` |
+| `:BuffergolfPrevHunk` | Navigate to previous diff hunk (synchronized) | `[h` |
+| `:BuffergolfFirstHunk` | Navigate to first diff hunk (synchronized) | `[H` |
+| `:BuffergolfLastHunk` | Navigate to last diff hunk (synchronized) | `]H` |
+| `:BuffergolfToggleOverlay` | Toggle mini.diff overlay visualization | `<leader>do` |
+
+**Golf Mode Features:**
+- **Synchronized Navigation**: When navigating to hunks, both practice and reference windows scroll together, accounting for line additions/deletions
+- **Keystroke-Free Navigation**: Navigation commands don't count toward your keystroke score
+- **Diff Overlay**: Shows detailed word-level differences between buffers (enabled by default)
+- **Customizable Keymaps**: All navigation keymaps can be customized or disabled in config
 
 ## How It Works
 
