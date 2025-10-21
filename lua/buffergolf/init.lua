@@ -17,6 +17,11 @@ local default_config = {
 		position = "right",  -- "right", "left", "top", "bottom"
 		size = 50,          -- percentage of screen for vertical splits, or lines for horizontal
 	},
+	stats_float = {
+		position = "bottom-right",  -- "bottom-right", "bottom-left", "top-right", "top-left"
+		offset_x = 2,               -- horizontal padding from window edge
+		offset_y = 1,               -- vertical padding from window edge
+	},
 }
 
 local configured = false

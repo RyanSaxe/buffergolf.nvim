@@ -260,7 +260,11 @@ local function attach_change_watcher(session)
 end
 
 local function disable_diagnostics(bufnr)
-  if type(vim.diagnostic) == "table" and vim.diagnostic.disable then
+  if type(vim.diagnostic) == "table" and vim.diagnostic.enable then
+    -- Use the new API: vim.diagnostic.enable(false, {bufnr = bufnr})
+    pcall(vim.diagnostic.enable, false, { bufnr = bufnr })
+  elseif type(vim.diagnostic) == "table" and vim.diagnostic.disable then
+    -- Fallback for older neovim versions
     pcall(vim.diagnostic.disable, bufnr)
   end
 end
@@ -360,7 +364,8 @@ local function setup_autocmds(session)
     end,
   })
 
-  vim.api.nvim_create_autocmd("WinEnter", {
+  -- Show float when entering the practice buffer
+  vim.api.nvim_create_autocmd("BufEnter", {
     group = aug,
     buffer = session.practice_buf,
     callback = function()
@@ -368,11 +373,24 @@ local function setup_autocmds(session)
     end,
   })
 
-  vim.api.nvim_create_autocmd("WinLeave", {
+  -- Hide float when leaving the practice buffer
+  vim.api.nvim_create_autocmd("BufLeave", {
     group = aug,
     buffer = session.practice_buf,
     callback = function()
       timer.hide_stats_float(session)
+    end,
+  })
+
+  -- Also handle window events for proper cleanup
+  vim.api.nvim_create_autocmd("WinLeave", {
+    group = aug,
+    callback = function()
+      -- Only hide if we're actually leaving the practice buffer
+      local current_buf = vim.api.nvim_win_get_buf(0)
+      if current_buf == session.practice_buf then
+        timer.hide_stats_float(session)
+      end
     end,
   })
 

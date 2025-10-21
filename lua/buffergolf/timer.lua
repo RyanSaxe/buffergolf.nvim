@@ -221,18 +221,44 @@ local function create_stats_float(session)
   local win_width = vim.api.nvim_win_get_width(session.practice_win)
   local win_height = vim.api.nvim_win_get_height(session.practice_win)
 
-  -- Calculate position for bottom-right (with padding for border)
-  local float_width = 45 -- Width for stats with keystrokes and par
-  local float_height = 1
+  -- Get config for positioning
+  local stats_config = session.config.stats_float or {}
+  local position = stats_config.position or "bottom-right"
+  local offset_x = stats_config.offset_x or 2
+  local offset_y = stats_config.offset_y or 1
 
-  -- Create floating window at bottom-right of practice window
+  -- Grid dimensions (2x2 grid with borders)
+  local float_width = 23  -- Width for 2x2 grid
+  local float_height = 3   -- 3 lines: top row, divider, bottom row
+
+  -- Calculate position based on config
+  local row, col
+  if position == "bottom-right" then
+    row = win_height - float_height - offset_y
+    col = win_width - float_width - offset_x
+  elseif position == "bottom-left" then
+    row = win_height - float_height - offset_y
+    col = offset_x
+  elseif position == "top-right" then
+    row = offset_y
+    col = win_width - float_width - offset_x
+  elseif position == "top-left" then
+    row = offset_y
+    col = offset_x
+  else
+    -- Default to bottom-right if invalid position
+    row = win_height - float_height - offset_y
+    col = win_width - float_width - offset_x
+  end
+
+  -- Create floating window
   local stats_win = vim.api.nvim_open_win(stats_buf, false, {
     relative = "win",
     win = session.practice_win,
     width = float_width,
     height = float_height,
-    row = win_height - float_height - 2,
-    col = win_width - float_width - 2,
+    row = row,
+    col = col,
     anchor = "NW",
     style = "minimal",
     border = "rounded",
@@ -274,21 +300,68 @@ function M.update_stats_float(session)
   local keystrokes = stats.get_keystroke_count(session)
   local par = stats.calculate_par(session)  -- Pass entire session for mode-aware par calculation
 
-  local stats_text
+  -- Format time with icon and countdown indicator
+  local time_display
   if session.timer_state.completed then
-    -- Show completion indicator
-    if session.timer_state.countdown_mode then
-      stats_text = string.format("✓ %s ↓ | WPM: %d | Keys: %d | Par: %d", time_str, wpm, keystrokes, par)
+    time_display = string.format("✓ %s%s", time_str, session.timer_state.countdown_mode and " ↓" or "")
+  else
+    time_display = string.format("⏱ %s%s", time_str, session.timer_state.countdown_mode and " ↓" or "")
+  end
+
+  -- Calculate the bottom-right metric based on mode
+  local bottom_right
+  if session.mode == "golf" then
+    -- Golf mode: Show score percentage
+    if par > 0 then
+      local score_pct = (1 - keystrokes / par) * 100
+      if score_pct > 0 then
+        bottom_right = string.format("+%.1f%%", score_pct)
+      elseif score_pct < 0 then
+        bottom_right = string.format("%.1f%%", score_pct)
+      else
+        bottom_right = "0.0%"
+      end
     else
-      stats_text = string.format("✓ %s | WPM: %d | Keys: %d | Par: %d", time_str, wpm, keystrokes, par)
+      bottom_right = "N/A"
     end
   else
-    if session.timer_state.countdown_mode then
-      stats_text = string.format("⏱ %s ↓ | WPM: %d | Keys: %d | Par: %d", time_str, wpm, keystrokes, par)
-    else
-      stats_text = string.format("⏱ %s | WPM: %d | Keys: %d | Par: %d", time_str, wpm, keystrokes, par)
-    end
+    -- Typing mode: Show WPM
+    bottom_right = string.format("WPM: %d", wpm)
   end
+
+  -- Format the values for display
+  local par_display = string.format("Par: %d", par)
+  local keys_display = string.format("Keys: %d", keystrokes)
+
+  -- Pad strings to ensure consistent grid alignment
+  -- Each cell should be 10 chars (23 width - 3 for borders = 20, divided by 2 = 10 per cell)
+  local function pad_center(str, width)
+    local padding = width - vim.fn.strwidth(str)
+    local left_pad = math.floor(padding / 2)
+    local right_pad = padding - left_pad
+    return string.rep(" ", left_pad) .. str .. string.rep(" ", right_pad)
+  end
+
+  time_display = pad_center(time_display, 10)
+  par_display = pad_center(par_display, 10)
+  keys_display = pad_center(keys_display, 10)
+  bottom_right = pad_center(bottom_right, 10)
+
+  -- Create the 2x2 grid with box drawing characters
+  local grid_lines = {
+    "┌──────────┬──────────┐",
+    "│" .. time_display .. "│" .. par_display .. "│",
+    "├──────────┼──────────┤",
+    "│" .. keys_display .. "│" .. bottom_right .. "│",
+    "└──────────┴──────────┘",
+  }
+
+  -- Only use the content lines (skip the border lines since nvim adds its own rounded border)
+  local content_lines = {
+    "│" .. time_display .. "│" .. par_display .. "│",
+    "├──────────┼──────────┤",
+    "│" .. keys_display .. "│" .. bottom_right .. "│",
+  }
 
   -- Update window highlights based on completion state
   if session.timer_state.stats_win and win_valid(session.timer_state.stats_win) then
@@ -299,13 +372,20 @@ function M.update_stats_float(session)
   end
 
   -- Update buffer text (doesn't cause flickering)
-  pcall(vim.api.nvim_buf_set_lines, session.timer_state.stats_buf, 0, -1, false, { stats_text })
+  pcall(vim.api.nvim_buf_set_lines, session.timer_state.stats_buf, 0, -1, false, content_lines)
 end
 
 function M.show_stats_float(session)
   if not session.timer_state or not session.timer_state.stats_win or not win_valid(session.timer_state.stats_win) then
     return
   end
+
+  -- Only show if the current buffer is the practice buffer
+  local current_buf = vim.api.nvim_get_current_buf()
+  if current_buf ~= session.practice_buf then
+    return
+  end
+
   pcall(vim.api.nvim_win_set_config, session.timer_state.stats_win, { hide = false })
 end
 

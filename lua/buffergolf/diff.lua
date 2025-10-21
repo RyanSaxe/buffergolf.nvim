@@ -133,6 +133,7 @@ end
 -- Apply diff highlights to the reference buffer
 function M.apply_diff_highlights(session)
   if not session.reference_buf or not vim.api.nvim_buf_is_valid(session.reference_buf) then
+    vim.notify("BufferGolf: No valid reference buffer for diff highlights", vim.log.levels.DEBUG)
     return
   end
 
@@ -159,6 +160,18 @@ function M.apply_diff_highlights(session)
   -- Compute the diff
   local diff_info = compute_line_diff(practice_lines, target_lines)
 
+  -- Count diff types for debugging
+  local diff_counts = { add = 0, change = 0, delete = 0, match = 0 }
+  for _, diff in ipairs(diff_info) do
+    diff_counts[diff.type] = (diff_counts[diff.type] or 0) + 1
+  end
+
+  -- Log diff summary (only in debug mode if needed)
+  if vim.g.buffergolf_debug then
+    vim.notify(string.format("BufferGolf diff: %d adds, %d changes, %d deletes, %d matches",
+      diff_counts.add, diff_counts.change, diff_counts.delete, diff_counts.match), vim.log.levels.DEBUG)
+  end
+
   -- Apply highlights based on diff
   for _, diff in ipairs(diff_info) do
     local line_num = diff.line - 1  -- 0-indexed for nvim API
@@ -166,36 +179,49 @@ function M.apply_diff_highlights(session)
     if line_num < #target_lines then  -- Can only highlight lines that exist
       if diff.type == "add" then
         -- Highlight entire line as needing to be added
-        vim.api.nvim_buf_add_highlight(
+        local line_text = target_lines[line_num + 1] or ""
+        vim.api.nvim_buf_set_extmark(
           session.reference_buf,
           ns,
-          "BuffergolfDiffAdd",
           line_num,
           0,
-          -1
+          {
+            end_col = #line_text,
+            hl_eol = true,  -- Highlight to end of line including EOL
+            hl_group = "BuffergolfDiffAdd",
+            priority = 100
+          }
         )
       elseif diff.type == "change" then
         -- Highlight line as needing changes
-        vim.api.nvim_buf_add_highlight(
+        local line_text = target_lines[line_num + 1] or ""
+        vim.api.nvim_buf_set_extmark(
           session.reference_buf,
           ns,
-          "BuffergolfDiffChange",
           line_num,
           0,
-          -1
+          {
+            end_col = #line_text,
+            hl_eol = true,  -- Highlight to end of line including EOL
+            hl_group = "BuffergolfDiffChange",
+            priority = 100
+          }
         )
 
         -- Add inline diff highlights if lines are similar enough
         local inline_diffs = get_inline_diff(diff.practice, diff.target)
         if inline_diffs and #inline_diffs > 0 then
           for _, range in ipairs(inline_diffs) do
-            vim.api.nvim_buf_add_highlight(
+            vim.api.nvim_buf_set_extmark(
               session.reference_buf,
               ns,
-              "BuffergolfDiffTextAdd",
               line_num,
               range.start,
-              range.finish
+              {
+                end_col = range.finish,
+                hl_group = "BuffergolfDiffTextAdd",
+                priority = 110  -- Higher priority for inline diffs
+              }
             )
           end
         end
