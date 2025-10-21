@@ -1,6 +1,5 @@
 local timer = require("buffergolf.timer")
 local keystroke = require("buffergolf.keystroke")
-local diff = require("buffergolf.diff")
 
 local M = {}
 
@@ -152,9 +151,11 @@ local function refresh_visuals(session)
         break
       end
 
-      -- For golf mode, update diff highlights instead of ghost text
+      -- For golf mode, update mini.diff reference text
       if session.mode == "golf" then
-        diff.apply_diff_highlights(session)
+        if session.update_mini_diff then
+          session.update_mini_diff()
+        end
         break
       end
 
@@ -346,9 +347,12 @@ local function clear_state(session)
   if session.augroup then
     pcall(vim.api.nvim_del_augroup_by_id, session.augroup)
   end
-  -- Clear diff highlights if in golf mode
-  if session.mode == "golf" then
-    diff.clear_diff_highlights(session)
+  -- Clean up mini.diff if it was enabled
+  if session.mode == "golf" and session.minidiff_enabled and session.reference_buf then
+    local ok, minidiff = pcall(require, 'mini.diff')
+    if ok and buf_valid(session.reference_buf) then
+      pcall(minidiff.disable, session.reference_buf)
+    end
   end
 end
 
@@ -489,7 +493,7 @@ local function create_reference_window(session)
   -- Set window options
   vim.api.nvim_set_option_value("number", true, { win = ref_win })
   vim.api.nvim_set_option_value("relativenumber", false, { win = ref_win })
-  vim.api.nvim_set_option_value("signcolumn", "no", { win = ref_win })
+  vim.api.nvim_set_option_value("signcolumn", "yes:1", { win = ref_win })  -- Show sign column for mini.diff
   vim.api.nvim_set_option_value("foldcolumn", "0", { win = ref_win })
 
   -- Add title to reference window
@@ -503,6 +507,62 @@ local function create_reference_window(session)
   session.reference_win = ref_win
 
   return ref_buf, ref_win
+end
+
+local function setup_mini_diff_for_golf(session)
+  -- Check if mini.diff is available
+  local ok, minidiff = pcall(require, 'mini.diff')
+  if not ok then
+    vim.notify("BufferGolf: mini.diff is required for golf mode visualization. Please install nvim-mini/mini.diff", vim.log.levels.WARN)
+    return
+  end
+
+  -- Ensure mini.diff is set up (safe to call multiple times)
+  if not minidiff.config then
+    minidiff.setup({
+      -- Use sign visualization by default
+      view = {
+        style = 'sign',
+        signs = { add = '│', change = '│', delete = '│' },
+      },
+    })
+  end
+
+  -- Enable mini.diff for the reference buffer with a custom source
+  -- We use the 'none' source since we'll manually set reference text
+  local source = minidiff.gen_source.none()
+
+  -- Configure mini.diff for this specific buffer
+  vim.b[session.reference_buf].minidiff_config = {
+    source = source,
+    view = {
+      style = 'sign',
+      signs = { add = '▒', change = '▒', delete = '▒' },
+    },
+  }
+
+  -- Enable mini.diff for the reference buffer
+  minidiff.enable(session.reference_buf)
+
+  -- Set the current practice buffer content as the reference text
+  -- This shows what needs to change in the reference to match practice
+  local practice_lines = vim.api.nvim_buf_get_lines(session.practice_buf, 0, -1, false)
+  minidiff.set_ref_text(session.reference_buf, practice_lines)
+
+  -- Store mini.diff state in session for updates
+  session.minidiff_enabled = true
+
+  -- Update reference text whenever practice buffer changes
+  local update_diff = function()
+    if not session.minidiff_enabled then return end
+    if not buf_valid(session.practice_buf) or not buf_valid(session.reference_buf) then return end
+
+    local new_practice_lines = vim.api.nvim_buf_get_lines(session.practice_buf, 0, -1, false)
+    minidiff.set_ref_text(session.reference_buf, new_practice_lines)
+  end
+
+  -- Add to the session's refresh callback
+  session.update_mini_diff = update_diff
 end
 
 local function normalize_reference_lines(lines, bufnr)
@@ -693,9 +753,9 @@ function M.start_golf(origin_bufnr, start_lines, target_lines, config)
   -- Set up keystroke tracking
   keystroke.init_session(session)
 
-  -- Create reference window and initialize diff highlighting
+  -- Create reference window and set up mini.diff for visualization
   create_reference_window(session)
-  diff.init(session)
+  setup_mini_diff_for_golf(session)
 
   timer.init(session)
   refresh_visuals(session)
