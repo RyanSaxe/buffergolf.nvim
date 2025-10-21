@@ -178,7 +178,7 @@ local function check_countdown_expired(session)
   return false
 end
 
-local function setup_highlights()
+local function setup_highlights(config)
   -- Setup highlight groups for the stats window
   local bg_color = vim.api.nvim_get_hl(0, { name = "Normal" }).bg or "#1e1e1e"
   local border_color = vim.api.nvim_get_hl(0, { name = "FloatBorder" }).fg or "#4a4a4a"
@@ -206,11 +206,44 @@ local function setup_highlights()
     fg = "#5eb65e",
     bg = bg_color,
   })
+
+  -- Score-based highlights for golf mode
+  local score_colors = (config and config.score_colors) or {}
+
+  vim.api.nvim_set_hl(0, "BuffergolfScoreVeryBad", {
+    fg = score_colors.very_bad or "#ff0000",
+    bold = true,
+  })
+
+  vim.api.nvim_set_hl(0, "BuffergolfScoreBad", {
+    fg = score_colors.bad or "#ff5555",
+    bold = true,
+  })
+
+  vim.api.nvim_set_hl(0, "BuffergolfScorePoor", {
+    fg = score_colors.poor or "#ffaa00",
+    bold = true,
+  })
+
+  vim.api.nvim_set_hl(0, "BuffergolfScoreOkay", {
+    fg = score_colors.okay or "#88ccff",
+    bold = true,
+  })
+
+  vim.api.nvim_set_hl(0, "BuffergolfScoreGood", {
+    fg = score_colors.good or "#5555ff",
+    bold = true,
+  })
+
+  vim.api.nvim_set_hl(0, "BuffergolfScoreGreat", {
+    fg = score_colors.great or "#00ff00",
+    bold = true,
+  })
 end
 
 local function create_stats_float(session)
   -- Setup highlights
-  setup_highlights()
+  setup_highlights(session.config)
 
   -- Create buffer for stats display
   local stats_buf = vim.api.nvim_create_buf(false, true)
@@ -310,10 +343,27 @@ function M.update_stats_float(session)
 
   -- Calculate the bottom-right metric based on mode
   local bottom_right
+  local score_hl_group = nil
   if session.mode == "golf" then
     -- Golf mode: Show score percentage
     if par > 0 then
       local score_pct = (1 - keystrokes / par) * 100
+
+      -- Determine highlight group based on score
+      if score_pct < -50 then
+        score_hl_group = "BuffergolfScoreVeryBad"
+      elseif score_pct < -25 then
+        score_hl_group = "BuffergolfScoreBad"
+      elseif score_pct < 0 then
+        score_hl_group = "BuffergolfScorePoor"
+      elseif score_pct < 25 then
+        score_hl_group = "BuffergolfScoreOkay"
+      elseif score_pct < 50 then
+        score_hl_group = "BuffergolfScoreGood"
+      else
+        score_hl_group = "BuffergolfScoreGreat"
+      end
+
       if score_pct > 0 then
         bottom_right = string.format("+%.1f%%", score_pct)
       elseif score_pct < 0 then
@@ -373,6 +423,38 @@ function M.update_stats_float(session)
 
   -- Update buffer text (doesn't cause flickering)
   pcall(vim.api.nvim_buf_set_lines, session.timer_state.stats_buf, 0, -1, false, content_lines)
+
+  -- Apply score color highlighting for golf mode
+  if session.mode == "golf" and score_hl_group then
+    -- Clear existing extmarks in namespace
+    local ns_id = vim.api.nvim_create_namespace("buffergolf_score_color")
+    pcall(vim.api.nvim_buf_clear_namespace, session.timer_state.stats_buf, ns_id, 0, -1)
+
+    -- Find the position of the score in the bottom-right cell (line 3, after "│Keys: N│")
+    -- The score text is in content_lines[3], need to find where it starts
+    local line_text = content_lines[3]
+    local score_start = line_text:find("│", 12) -- Find the second │
+    if score_start then
+      -- The score starts after the second │
+      local score_text_start = score_start + 1
+      -- Find where the actual score number begins (skip leading spaces)
+      local trimmed_start = line_text:find("%S", score_text_start)
+      if trimmed_start then
+        local score_text_end = line_text:find("│", trimmed_start)
+        if score_text_end then
+          -- Apply highlight to the score text
+          pcall(vim.api.nvim_buf_add_highlight,
+            session.timer_state.stats_buf,
+            ns_id,
+            score_hl_group,
+            2,  -- Line index (0-based, so line 3 is index 2)
+            trimmed_start - 1,  -- Start column (0-based)
+            score_text_end - 1  -- End column (0-based)
+          )
+        end
+      end
+    end
+  end
 end
 
 function M.show_stats_float(session)

@@ -61,6 +61,44 @@ local function copy_indent_options(origin, target)
   end
 end
 
+-- Generate buffer names for buffergolf practice and reference buffers
+-- Suffix should be ".golf" for practice or ".golf.ref" for reference
+local function generate_buffer_name(origin_bufnr, suffix)
+  local origin_name = vim.api.nvim_buf_get_name(origin_bufnr)
+
+  if origin_name == "" then
+    -- Unnamed buffer - use filetype or default
+    local ft = vim.api.nvim_get_option_value("filetype", { buf = origin_bufnr })
+    local ext = ft ~= "" and ft or "txt"
+    return "unnamed" .. suffix .. "." .. ext
+  end
+
+  -- Named buffer - insert suffix before extension
+  local dir = vim.fn.fnamemodify(origin_name, ":h")
+  local basename = vim.fn.fnamemodify(origin_name, ":t:r")
+  local ext = vim.fn.fnamemodify(origin_name, ":e")
+
+  local name
+  if ext ~= "" then
+    name = dir .. "/" .. basename .. suffix .. "." .. ext
+  else
+    name = dir .. "/" .. basename .. suffix
+  end
+
+  -- Check if a .golf.* file exists on disk (should never happen)
+  if vim.fn.filereadable(name) == 1 then
+    vim.notify(
+      "WARNING: Found existing file '" .. name .. "' on disk. " ..
+      "BufferGolf practice/reference buffers should be temporary and never exist as real files. " ..
+      "Please remove or rename this file.",
+      vim.log.levels.ERROR,
+      { title = "buffergolf" }
+    )
+  end
+
+  return name
+end
+
 local function get_session(bufnr)
   return sessions_by_origin[bufnr] or sessions_by_practice[bufnr]
 end
@@ -464,6 +502,11 @@ end
 local function create_reference_window(session)
   -- Create readonly buffer with target text
   local ref_buf = vim.api.nvim_create_buf(false, true)
+
+  -- Set buffer name for better UX in statuslines and buffer lists
+  local ref_name = generate_buffer_name(session.origin_buf, ".golf.ref")
+  vim.api.nvim_buf_set_name(ref_buf, ref_name)
+
   vim.api.nvim_buf_set_lines(ref_buf, 0, -1, false, session.reference_lines)
   vim.api.nvim_set_option_value("modifiable", false, { buf = ref_buf })
   vim.api.nvim_set_option_value("buftype", "nofile", { buf = ref_buf })
@@ -824,6 +867,11 @@ function M.start(origin_bufnr, config, target_lines)
   reference = normalize_reference_lines(reference, origin_bufnr)
 
   local practice_buf = vim.api.nvim_create_buf(false, false)
+
+  -- Set buffer name for better UX in statuslines and buffer lists
+  local practice_name = generate_buffer_name(origin_bufnr, ".golf")
+  vim.api.nvim_buf_set_name(practice_buf, practice_name)
+
   vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = practice_buf })
   vim.api.nvim_set_option_value("swapfile", false, { buf = practice_buf })
   vim.api.nvim_set_option_value("undofile", false, { buf = practice_buf })
@@ -907,6 +955,11 @@ function M.start_golf(origin_bufnr, start_lines, target_lines, config)
   start_lines = normalize_reference_lines(start_lines, origin_bufnr)
 
   local practice_buf = vim.api.nvim_create_buf(false, false)
+
+  -- Set buffer name for better UX in statuslines and buffer lists
+  local practice_name = generate_buffer_name(origin_bufnr, ".golf")
+  vim.api.nvim_buf_set_name(practice_buf, practice_name)
+
   vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = practice_buf })
   vim.api.nvim_set_option_value("swapfile", false, { buf = practice_buf })
   vim.api.nvim_set_option_value("undofile", false, { buf = practice_buf })

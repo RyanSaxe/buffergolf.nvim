@@ -96,7 +96,14 @@ local function select_buffer_with_preview(origin_buf, target_lines, config)
             vim.notify("Cannot use current buffer as starting point", vim.log.levels.WARN, { title = "buffergolf" })
             return
           end
+
+          -- Ensure buffer is loaded before reading
+          if not vim.api.nvim_buf_is_loaded(item.buf) then
+            vim.fn.bufload(item.buf)
+          end
+
           local start_lines = vim.api.nvim_buf_get_lines(item.buf, 0, -1, false)
+
           picker:close()
           start_golf_mode(origin_buf, start_lines, target_lines, config)
         end
@@ -307,7 +314,7 @@ end
 -- Main picker function
 local function show_start_state_picker(origin_buf, target_lines, is_selection, config)
   local options = {
-    { label = "Empty", value = "empty", description = "Start from blank (typing practice)" },
+    { label = "Empty", value = "empty", description = "Typing practice - start from blank buffer" },
     { label = "File...", value = "file", description = "Choose a file as starting state" },
     { label = "Buffer...", value = "buffer", description = "Choose an open buffer" },
     { label = "Register...", value = "register", description = "Use register content" },

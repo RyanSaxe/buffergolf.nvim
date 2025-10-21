@@ -9,6 +9,7 @@ local default_config = {
 	disable_diagnostics = true,
 	disable_inlay_hints = true,
 	disable_matchparen = true,
+	difficulty = "medium",  -- "easy" (1.0x), "medium" (0.67x), "hard" (0.5x), "expert" (0.33x)
 	keymaps = {
 		toggle = "<leader>bg",
 		countdown = "<leader>bG",
@@ -21,6 +22,16 @@ local default_config = {
 		position = "bottom-right",  -- "bottom-right", "bottom-left", "top-right", "top-left"
 		offset_x = 2,               -- horizontal padding from window edge
 		offset_y = 1,               -- vertical padding from window edge
+	},
+	score_colors = {
+		-- Colors for score percentage display (golf mode only)
+		-- Score = (par - keystrokes) / par * 100
+		very_bad = "#ff0000",      -- < -50%: bright red
+		bad = "#ff5555",           -- -50% to -25%: red
+		poor = "#ffaa00",          -- -25% to 0%: orange
+		okay = "#88ccff",          -- 0% to 25%: light blue
+		good = "#5555ff",          -- 25% to 50%: blue
+		great = "#00ff00",         -- 50% to 75%: green
 	},
 }
 
