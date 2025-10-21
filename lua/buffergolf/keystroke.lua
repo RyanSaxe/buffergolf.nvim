@@ -176,6 +176,22 @@ function M.get_count(session)
   return state and state.count or 0
 end
 
+-- Reset keystroke count for a session
+function M.reset_count(session)
+  if not session or not session.practice_buf then
+    return
+  end
+
+  local state = active_sessions[session.practice_buf]
+  if state then
+    state.count = 0
+    state.debug_keys = {}
+    if state.mode_counts then
+      state.mode_counts = { n = 0, i = 0, v = 0 }
+    end
+  end
+end
+
 -- DEBUG: Get debug keys for a session
 function M.get_debug_keys(session)
   if not session or not session.practice_buf then

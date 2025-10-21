@@ -272,7 +272,7 @@ function M.update_stats_float(session)
 
   -- Get keystroke and par info
   local keystrokes = stats.get_keystroke_count(session)
-  local par = stats.calculate_par(session.reference_lines)
+  local par = stats.calculate_par(session)  -- Pass entire session for mode-aware par calculation
 
   local stats_text
   if session.timer_state.completed then
@@ -303,14 +303,14 @@ function M.update_stats_float(session)
 end
 
 function M.show_stats_float(session)
-  if not session.timer_state.stats_win or not win_valid(session.timer_state.stats_win) then
+  if not session.timer_state or not session.timer_state.stats_win or not win_valid(session.timer_state.stats_win) then
     return
   end
   pcall(vim.api.nvim_win_set_config, session.timer_state.stats_win, { hide = false })
 end
 
 function M.hide_stats_float(session)
-  if not session.timer_state.stats_win or not win_valid(session.timer_state.stats_win) then
+  if not session.timer_state or not session.timer_state.stats_win or not win_valid(session.timer_state.stats_win) then
     return
   end
   pcall(vim.api.nvim_win_set_config, session.timer_state.stats_win, { hide = true })
@@ -336,12 +336,21 @@ function M.start_countdown(session, seconds)
 
   -- Reset timer state
   session.timer_state.start_time = nil
-  session.timer_state.countdown_mode = true
-  session.timer_state.countdown_duration = seconds
   session.timer_state.locked = false
   session.timer_state.completed = false
   session.timer_state.frozen_time = nil
   session.timer_state.frozen_wpm = nil
+
+  -- Handle nil or 0 as count-up mode
+  if not seconds or seconds == 0 then
+    -- Count-up mode (no countdown)
+    session.timer_state.countdown_mode = false
+    session.timer_state.countdown_duration = nil
+  else
+    -- Countdown mode
+    session.timer_state.countdown_mode = true
+    session.timer_state.countdown_duration = seconds
+  end
 
   -- Unlock buffer if it was previously locked
   if buf_valid(session.practice_buf) then

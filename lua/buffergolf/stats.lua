@@ -6,10 +6,49 @@ local function trim_whitespace(str)
   return str:match("^%s*(.-)%s*$") or ""
 end
 
-function M.calculate_par(reference_lines)
-  -- Calculate par as the number of keystrokes needed to type the reference text
-  -- from an empty buffer, excluding leading/trailing whitespace per line
-  -- (since autoindent should handle those for free)
+-- Calculate Levenshtein edit distance between two sets of lines
+function M.calculate_edit_distance(lines1, lines2)
+  -- Trim whitespace from each line for comparison
+  local trimmed1 = {}
+  for _, line in ipairs(lines1 or {}) do
+    table.insert(trimmed1, trim_whitespace(line))
+  end
+
+  local trimmed2 = {}
+  for _, line in ipairs(lines2 or {}) do
+    table.insert(trimmed2, trim_whitespace(line))
+  end
+
+  -- Standard Levenshtein algorithm
+  local m, n = #trimmed1, #trimmed2
+  local dp = {}
+
+  -- Initialize DP table
+  for i = 0, m do
+    dp[i] = {}
+    dp[i][0] = i
+  end
+  for j = 0, n do
+    dp[0][j] = j
+  end
+
+  -- Fill DP table
+  for i = 1, m do
+    for j = 1, n do
+      local cost = (trimmed1[i] == trimmed2[j]) and 0 or 1
+      dp[i][j] = math.min(
+        dp[i-1][j] + 1,      -- deletion
+        dp[i][j-1] + 1,      -- insertion
+        dp[i-1][j-1] + cost  -- substitution
+      )
+    end
+  end
+
+  return dp[m][n]
+end
+
+-- Calculate par for typing mode (from empty buffer)
+local function calculate_typing_mode_par(reference_lines)
   if not reference_lines or #reference_lines == 0 then
     return 0
   end
@@ -30,6 +69,31 @@ function M.calculate_par(reference_lines)
   par = par + 1
 
   return par
+end
+
+function M.calculate_par(session_or_reference_lines, start_lines)
+  -- Handle both old API (just reference_lines) and new API (session object)
+  local reference_lines
+  local mode = "typing"
+
+  -- Check if first arg is a session object
+  if type(session_or_reference_lines) == "table" and session_or_reference_lines.reference_lines then
+    local session = session_or_reference_lines
+    reference_lines = session.reference_lines
+    start_lines = session.start_lines
+    mode = session.mode or "typing"
+  else
+    -- Old API: just reference_lines passed
+    reference_lines = session_or_reference_lines
+  end
+
+  -- If we have start_lines or mode is golf, use edit distance
+  if mode == "golf" and start_lines and #start_lines > 0 then
+    return M.calculate_edit_distance(start_lines, reference_lines)
+  end
+
+  -- Otherwise, use typing mode par (character count from empty)
+  return calculate_typing_mode_par(reference_lines)
 end
 
 function M.get_keystroke_count(session)
@@ -102,7 +166,7 @@ function M.get_stats(session)
   local correct_chars = M.count_correct_characters(session)
   local wpm = M.calculate_wpm(session)
   local keystrokes = M.get_keystroke_count(session)
-  local par = M.calculate_par(session.reference_lines)
+  local par = M.calculate_par(session)  -- Pass entire session for mode-aware par calculation
 
   return {
     correct_chars = correct_chars,

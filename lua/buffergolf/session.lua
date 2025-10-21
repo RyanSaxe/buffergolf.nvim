@@ -1,5 +1,6 @@
 local timer = require("buffergolf.timer")
 local keystroke = require("buffergolf.keystroke")
+local diff = require("buffergolf.diff")
 
 local M = {}
 
@@ -151,6 +152,13 @@ local function refresh_visuals(session)
         break
       end
 
+      -- For golf mode, update diff highlights instead of ghost text
+      if session.mode == "golf" then
+        diff.apply_diff_highlights(session)
+        break
+      end
+
+      -- Typing mode: show ghost text
       ensure_line_count(session)
 
       local bufnr = session.practice_buf
@@ -334,6 +342,10 @@ local function clear_state(session)
   if session.augroup then
     pcall(vim.api.nvim_del_augroup_by_id, session.augroup)
   end
+  -- Clear diff highlights if in golf mode
+  if session.mode == "golf" then
+    diff.clear_diff_highlights(session)
+  end
 end
 
 local function setup_autocmds(session)
@@ -403,6 +415,78 @@ local function setup_autocmds(session)
   })
 end
 
+local function create_reference_window(session)
+  -- Create readonly buffer with target text
+  local ref_buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(ref_buf, 0, -1, false, session.reference_lines)
+  vim.api.nvim_set_option_value("modifiable", false, { buf = ref_buf })
+  vim.api.nvim_set_option_value("buftype", "nofile", { buf = ref_buf })
+  vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = ref_buf })
+  vim.api.nvim_set_option_value("swapfile", false, { buf = ref_buf })
+
+  -- Match filetype for syntax highlighting
+  local ft = vim.api.nvim_get_option_value("filetype", { buf = session.practice_buf })
+  if ft and ft ~= "" then
+    vim.api.nvim_set_option_value("filetype", ft, { buf = ref_buf })
+  end
+
+  -- Get window configuration
+  local ref_config = session.config.reference_window or {}
+  local position = ref_config.position or "right"
+  local size = ref_config.size or 50
+
+  -- Create split based on configuration
+  if position == "left" then
+    vim.cmd("leftabove vsplit")
+  elseif position == "top" then
+    vim.cmd("leftabove split")
+  elseif position == "bottom" then
+    vim.cmd("rightbelow split")
+  else  -- default to right
+    vim.cmd("rightbelow vsplit")
+  end
+
+  local ref_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_buf(ref_win, ref_buf)
+
+  -- Set window size based on configuration
+  if position == "left" or position == "right" then
+    -- For vertical splits, use percentage of screen width
+    local screen_width = vim.api.nvim_get_option("columns")
+    local win_width = math.floor(screen_width * size / 100)
+    vim.api.nvim_win_set_width(ref_win, win_width)
+  else
+    -- For horizontal splits, use fixed line count or percentage of height
+    if size <= 100 then
+      -- Treat as percentage
+      local screen_height = vim.api.nvim_get_option("lines")
+      local win_height = math.floor(screen_height * size / 100)
+      vim.api.nvim_win_set_height(ref_win, win_height)
+    else
+      -- Treat as absolute line count
+      vim.api.nvim_win_set_height(ref_win, size)
+    end
+  end
+
+  -- Set window options
+  vim.api.nvim_set_option_value("number", true, { win = ref_win })
+  vim.api.nvim_set_option_value("relativenumber", false, { win = ref_win })
+  vim.api.nvim_set_option_value("signcolumn", "no", { win = ref_win })
+  vim.api.nvim_set_option_value("foldcolumn", "0", { win = ref_win })
+
+  -- Add title to reference window
+  vim.api.nvim_buf_set_var(ref_buf, "buffergolf_reference", true)
+
+  -- Return to practice window
+  vim.api.nvim_set_current_win(session.practice_win)
+
+  -- Store reference window info in session
+  session.reference_buf = ref_buf
+  session.reference_win = ref_win
+
+  return ref_buf, ref_win
+end
+
 local function normalize_reference_lines(lines, bufnr)
   -- If expandtab is on, convert tabs to spaces in reference lines
   -- This ensures byte-by-byte comparison works with autoindent
@@ -439,12 +523,12 @@ local function normalize_reference_lines(lines, bufnr)
   return normalized
 end
 
-function M.start(origin_bufnr, config)
+function M.start(origin_bufnr, config, target_lines)
   if sessions_by_origin[origin_bufnr] then
     return
   end
 
-  local reference = vim.api.nvim_buf_get_lines(origin_bufnr, 0, -1, true)
+  local reference = target_lines or vim.api.nvim_buf_get_lines(origin_bufnr, 0, -1, true)
   if #reference == 0 then
     reference = { "" }
   end
@@ -494,6 +578,7 @@ function M.start(origin_bufnr, config)
     ns_mismatch = vim.api.nvim_create_namespace("BuffergolfMismatchNS"),
     prio_ghost = 200,
     ghost_marks = {},
+    mode = "typing", -- Typing practice mode (empty start)
   }
 
   sessions_by_origin[origin_bufnr] = session
@@ -516,6 +601,88 @@ function M.start(origin_bufnr, config)
   refresh_visuals(session)
 end
 
+function M.start_golf(origin_bufnr, start_lines, target_lines, config)
+  if sessions_by_origin[origin_bufnr] then
+    return
+  end
+
+  if not start_lines or #start_lines == 0 then
+    start_lines = { "" }
+  end
+
+  local reference = target_lines or vim.api.nvim_buf_get_lines(origin_bufnr, 0, -1, true)
+  if #reference == 0 then
+    reference = { "" }
+  end
+
+  -- Normalize tabs to spaces if expandtab is on
+  reference = normalize_reference_lines(reference, origin_bufnr)
+  start_lines = normalize_reference_lines(start_lines, origin_bufnr)
+
+  local practice_buf = vim.api.nvim_create_buf(false, false)
+  vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = practice_buf })
+  vim.api.nvim_set_option_value("swapfile", false, { buf = practice_buf })
+  vim.api.nvim_set_option_value("undofile", false, { buf = practice_buf })
+  vim.api.nvim_set_option_value("modifiable", true, { buf = practice_buf })
+  vim.api.nvim_set_option_value("buflisted", false, { buf = practice_buf })
+  vim.api.nvim_set_option_value("buftype", "", { buf = practice_buf })
+
+  local origin_ft = vim.api.nvim_get_option_value("filetype", { buf = origin_bufnr })
+  if origin_ft and origin_ft ~= "" then
+    vim.api.nvim_set_option_value("filetype", origin_ft, { buf = practice_buf })
+  end
+
+  copy_indent_options(origin_bufnr, practice_buf)
+
+  -- Set the starting lines (not empty for golf mode)
+  vim.api.nvim_buf_set_lines(practice_buf, 0, -1, true, start_lines)
+
+  local current_win = vim.api.nvim_get_current_win()
+  pcall(vim.api.nvim_buf_set_var, practice_buf, "buffergolf_practice", true)
+  pcall(vim.api.nvim_buf_set_var, practice_buf, "copilot_enabled", false)
+  pcall(vim.api.nvim_buf_set_var, practice_buf, "copilot_suggestion_auto_trigger", false)
+  pcall(vim.api.nvim_buf_set_var, practice_buf, "autopairs_enabled", false)
+  pcall(vim.api.nvim_buf_set_var, practice_buf, "minipairs_disable", true)
+
+  local session = {
+    origin_buf = origin_bufnr,
+    origin_win = current_win,
+    practice_win = current_win,
+    practice_buf = practice_buf,
+    reference_lines = reference,
+    start_lines = start_lines, -- Store starting lines for par calculation
+    config = config or {},
+    ns_ghost = vim.api.nvim_create_namespace("BuffergolfGhostNS"),
+    ns_mismatch = vim.api.nvim_create_namespace("BuffergolfMismatchNS"),
+    prio_ghost = 200,
+    ghost_marks = {},
+    mode = "golf", -- Golf mode (non-empty start)
+  }
+
+  sessions_by_origin[origin_bufnr] = session
+  sessions_by_practice[practice_buf] = session
+
+  apply_buffer_defaults(session)
+
+  vim.api.nvim_win_set_buf(current_win, practice_buf)
+  session.practice_win = vim.api.nvim_get_current_win()
+
+  disable_matchparen(session)
+
+  setup_autocmds(session)
+  attach_change_watcher(session)
+
+  -- Set up keystroke tracking
+  keystroke.init_session(session)
+
+  -- Create reference window and initialize diff highlighting
+  create_reference_window(session)
+  diff.init(session)
+
+  timer.init(session)
+  refresh_visuals(session)
+end
+
 function M.stop(bufnr)
   local session = get_session(bufnr)
   if not session then
@@ -524,6 +691,16 @@ function M.stop(bufnr)
 
   local practice_buf = session.practice_buf
   local origin_buf = session.origin_buf
+
+  -- Close reference window if it exists (golf mode)
+  if session.reference_win and win_valid(session.reference_win) then
+    pcall(vim.api.nvim_win_close, session.reference_win, true)
+  end
+
+  -- Delete reference buffer if it exists
+  if session.reference_buf and buf_valid(session.reference_buf) then
+    pcall(vim.api.nvim_buf_delete, session.reference_buf, { force = true })
+  end
 
   if win_valid(session.origin_win) and buf_valid(origin_buf) then
     vim.api.nvim_set_current_win(session.origin_win)
@@ -537,6 +714,64 @@ function M.stop(bufnr)
   end
 
   clear_state(session)
+end
+
+function M.reset_to_start(bufnr)
+  local session = get_session(bufnr)
+  if not session then
+    vim.notify("No active buffergolf session", vim.log.levels.WARN, { title = "buffergolf" })
+    return false
+  end
+
+  -- Ensure buffer is modifiable before resetting
+  vim.api.nvim_set_option_value("modifiable", true, { buf = session.practice_buf })
+
+  -- Reset buffer content based on mode
+  if session.mode == "typing" then
+    -- Typing mode starts with empty lines
+    local empty_lines = {}
+    for _ = 1, #session.reference_lines do
+      table.insert(empty_lines, "")
+    end
+    if #empty_lines == 0 then
+      empty_lines = { "" }
+    end
+    vim.api.nvim_buf_set_lines(session.practice_buf, 0, -1, true, empty_lines)
+  elseif session.mode == "golf" and session.start_lines then
+    -- Golf mode starts with pre-filled lines
+    vim.api.nvim_buf_set_lines(session.practice_buf, 0, -1, true, session.start_lines)
+  end
+
+  -- Reset cursor to start
+  if win_valid(session.practice_win) then
+    pcall(vim.api.nvim_win_set_cursor, session.practice_win, {1, 0})
+  end
+
+  -- Reset keystroke count
+  keystroke.reset_count(session)
+
+  -- Clear all ghost marks and mismatches
+  if session.ghost_marks then
+    for _, mark in pairs(session.ghost_marks) do
+      pcall(vim.api.nvim_buf_del_extmark, session.practice_buf, session.ns_ghost, mark)
+    end
+    session.ghost_marks = {}
+  end
+
+  -- Clear mismatch highlights
+  if session.ns_mismatch then
+    pcall(vim.api.nvim_buf_clear_namespace, session.practice_buf, session.ns_mismatch, 0, -1)
+  end
+
+  -- Unlock buffer in case it was locked
+  if buf_valid(session.practice_buf) then
+    pcall(vim.api.nvim_set_option_value, "modifiable", true, { buf = session.practice_buf })
+  end
+
+  -- Refresh visuals to recreate ghost text and highlights
+  refresh_visuals(session)
+
+  return true
 end
 
 function M.start_countdown(bufnr, seconds)

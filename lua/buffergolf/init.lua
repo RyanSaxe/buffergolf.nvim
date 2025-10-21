@@ -1,4 +1,5 @@
 local Session = require("buffergolf.session")
+local Picker = require("buffergolf.picker")
 
 local M = {}
 
@@ -11,6 +12,10 @@ local default_config = {
 	keymaps = {
 		toggle = "<leader>bg",
 		countdown = "<leader>bG",
+	},
+	reference_window = {
+		position = "right",  -- "right", "left", "top", "bottom"
+		size = 50,          -- percentage of screen for vertical splits, or lines for horizontal
 	},
 }
 
@@ -62,9 +67,14 @@ function M.setup(opts)
 		end,
 	})
 
-	vim.api.nvim_create_user_command("Buffergolf", function()
-		M.toggle()
-	end, { desc = "Toggle buffergolf practice buffer" })
+	vim.api.nvim_create_user_command("Buffergolf", function(opts)
+		-- Handle range if provided (visual selection)
+		if opts.range > 0 then
+			M.toggle_with_picker()
+		else
+			M.toggle_with_picker()
+		end
+	end, { desc = "Start buffergolf practice with picker", range = true })
 
 	vim.api.nvim_create_user_command("BuffergolfStop", function()
 		M.stop()
@@ -73,6 +83,10 @@ function M.setup(opts)
 	vim.api.nvim_create_user_command("BuffergolfCountdown", function()
 		M.start_countdown()
 	end, { desc = "Start countdown timer for buffergolf practice buffer" })
+
+	vim.api.nvim_create_user_command("BuffergolfTyping", function()
+		M.start_typing()
+	end, { desc = "Start buffergolf typing practice (empty start)" })
 
 	-- DEBUG: Add debug command
 	vim.api.nvim_create_user_command("BuffergolfDebug", function()
@@ -97,7 +111,29 @@ function M.setup(opts)
 	configured = true
 end
 
+-- Legacy toggle function for backward compatibility
 function M.toggle()
+	local bufnr = vim.api.nvim_get_current_buf()
+	if Session.is_active(bufnr) then
+		Session.stop(bufnr)
+	else
+		-- Use picker for new behavior
+		M.toggle_with_picker()
+	end
+end
+
+-- New toggle function that shows the picker
+function M.toggle_with_picker()
+	local bufnr = vim.api.nvim_get_current_buf()
+	if Session.is_active(bufnr) then
+		Session.stop(bufnr)
+	else
+		Picker.show_picker(bufnr, M.config)
+	end
+end
+
+-- Direct start without picker (for backward compatibility)
+function M.toggle_legacy()
 	local bufnr = vim.api.nvim_get_current_buf()
 	if Session.is_active(bufnr) then
 		Session.stop(bufnr)
@@ -114,30 +150,64 @@ function M.stop()
 	Session.stop(vim.api.nvim_get_current_buf())
 end
 
+-- Start typing practice (empty start) without picker
+function M.start_typing()
+	local bufnr = vim.api.nvim_get_current_buf()
+	if Session.is_active(bufnr) then
+		Session.stop(bufnr)
+	end
+	Session.start(bufnr, M.config)
+end
+
 function M.start_countdown()
 	local bufnr = vim.api.nvim_get_current_buf()
 
 	vim.ui.input({ prompt = "Countdown duration (seconds): " }, function(input)
-		if not input or input == "" then
-			return
-		end
-
-		local seconds = tonumber(input)
-		if not seconds or seconds <= 0 then
-			vim.notify("Invalid duration. Please enter a positive number.", vim.log.levels.ERROR, { title = "buffergolf" })
+		-- Handle ESC/cancel - do nothing
+		if input == nil then
 			return
 		end
 
 		-- Check if there's already an active session
 		if Session.is_active(bufnr) then
-			-- Just switch to countdown mode
-			Session.start_countdown(bufnr, seconds)
+			-- Reset the session to start
+			Session.reset_to_start(bufnr)
+
+			-- Handle empty input - count-up mode
+			if input == "" then
+				-- Start count-up mode (no countdown)
+				Session.start_countdown(bufnr, nil)
+			else
+				-- Handle numeric input - countdown mode
+				local seconds = tonumber(input)
+				if not seconds or seconds <= 0 then
+					vim.notify("Invalid duration. Please enter a positive number.", vim.log.levels.ERROR, { title = "buffergolf" })
+					return
+				end
+				Session.start_countdown(bufnr, seconds)
+			end
 		else
-			-- Start a new session first, then switch to countdown
-			Session.start(bufnr, M.config)
-			-- Get the new practice buffer number (session switched buffers)
-			local new_bufnr = vim.api.nvim_get_current_buf()
-			Session.start_countdown(new_bufnr, seconds)
+			-- No active session - show picker for new session
+			if input == "" then
+				-- Count-up mode for new session
+				local config_with_countup = vim.tbl_extend("force", M.config, {
+					countdown_mode = false
+				})
+				Picker.show_picker(bufnr, config_with_countup)
+			else
+				-- Countdown mode for new session
+				local seconds = tonumber(input)
+				if not seconds or seconds <= 0 then
+					vim.notify("Invalid duration. Please enter a positive number.", vim.log.levels.ERROR, { title = "buffergolf" })
+					return
+				end
+
+				local config_with_countdown = vim.tbl_extend("force", M.config, {
+					countdown_seconds = seconds,
+					countdown_mode = true
+				})
+				Picker.show_picker(bufnr, config_with_countdown)
+			end
 		end
 	end)
 end
