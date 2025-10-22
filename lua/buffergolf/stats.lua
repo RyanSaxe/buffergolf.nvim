@@ -122,19 +122,6 @@ local function calculate_golf_par_from_hunks(session)
     return 0
   end
 
-  -- Debug: Save hunk data for analysis
-  local debug_file = io.open('.test_files/debug_hunks.json', 'w')
-  if debug_file then
-    local debug_data = {
-      hunks = buf_data.hunks,
-      practice_lines = practice_lines,
-      reference_lines = reference_lines,
-      num_hunks = #buf_data.hunks
-    }
-    debug_file:write(vim.json.encode(debug_data))
-    debug_file:close()
-  end
-
   -- Calculate hunk-based par
   local hunk_par = 0
 

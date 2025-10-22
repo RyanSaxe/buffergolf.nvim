@@ -290,6 +290,33 @@ local function refresh_visuals(session)
   end
 end
 
+local function schedule_refresh(session)
+  if session.refresh_scheduled then
+    return
+  end
+
+  session.refresh_scheduled = true
+
+  vim.schedule(function()
+    session.refresh_scheduled = nil
+
+    if not session or not session.practice_buf then
+      return
+    end
+
+    -- Ensure session is still active for this practice buffer
+    if sessions_by_practice[session.practice_buf] ~= session then
+      return
+    end
+
+    if not buf_valid(session.practice_buf) then
+      return
+    end
+
+    refresh_visuals(session)
+  end)
+end
+
 local function attach_change_watcher(session)
   if session.change_attached then
     return
@@ -310,7 +337,7 @@ local function attach_change_watcher(session)
         return true
       end
       timer.on_first_edit(session)
-      refresh_visuals(session)
+      schedule_refresh(session)
     end,
     on_detach = function()
       session.change_attached = nil
@@ -406,6 +433,7 @@ local function clear_state(session)
   end
   session.change_attached = nil
   session.refreshing = nil
+  session.refresh_scheduled = nil
   if session.augroup then
     pcall(vim.api.nvim_del_augroup_by_id, session.augroup)
   end
@@ -1135,26 +1163,6 @@ function M.start_countdown(bufnr, seconds)
 
   timer.start_countdown(session, seconds)
   return true
-end
-
--- DEBUG: Expose function to print debug keys
-function M.debug_keys(bufnr)
-  local session = get_session(bufnr or vim.api.nvim_get_current_buf())
-  if not session then
-    print("No active buffergolf session")
-    return
-  end
-
-  local debug_keys = keystroke.get_debug_keys(session)
-  if not debug_keys or #debug_keys == 0 then
-    print("No debug keys available")
-    return
-  end
-
-  print("Recent keys captured:")
-  for _, entry in ipairs(debug_keys) do
-    print("  " .. entry)
-  end
 end
 
 return M

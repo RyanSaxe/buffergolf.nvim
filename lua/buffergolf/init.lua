@@ -104,11 +104,6 @@ function M.setup(opts)
 		M.start_typing()
 	end, { desc = "Start buffergolf typing practice (empty start)" })
 
-	-- DEBUG: Add debug command
-	vim.api.nvim_create_user_command("BuffergolfDebug", function()
-		Session.debug_keys()
-	end, { desc = "Debug: Show recent keystrokes captured" })
-
 	if toggle_key and toggle_key ~= "" then
 		vim.keymap.set("n", toggle_key, M.toggle, {
 			desc = "Toggle buffergolf practice buffer",

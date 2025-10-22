@@ -241,21 +241,8 @@ local function select_git_commit_with_preview(origin_buf, target_lines, config)
     snacks.git_log_file({
       file = filepath,
       confirm = function(picker, item)
-        vim.notify("DEBUG: Confirm function called", vim.log.levels.INFO, { title = "buffergolf" })
-
-        if item then
-          vim.notify("DEBUG: Item exists, type = " .. type(item), vim.log.levels.INFO, { title = "buffergolf" })
-          vim.notify("DEBUG: Item contents = " .. vim.inspect(item), vim.log.levels.INFO, { title = "buffergolf" })
-        else
-          vim.notify("DEBUG: Item is nil!", vim.log.levels.WARN, { title = "buffergolf" })
-        end
-
-        -- The hash is stored in item.commit, not item.hash
         if item and item.commit then
-          vim.notify("DEBUG: Commit found = " .. item.commit, vim.log.levels.INFO, { title = "buffergolf" })
-          -- Get file content at this commit using relative path
           local get_cmd = string.format("git show %s:%s 2>/dev/null", item.commit, relative_path)
-          vim.notify("DEBUG: Running command: " .. get_cmd, vim.log.levels.INFO, { title = "buffergolf" })
           local start_lines = vim.fn.systemlist(get_cmd)
 
           if vim.v.shell_error ~= 0 then
@@ -263,11 +250,10 @@ local function select_git_commit_with_preview(origin_buf, target_lines, config)
             return
           end
 
-          vim.notify("DEBUG: Got " .. #start_lines .. " lines from commit", vim.log.levels.INFO, { title = "buffergolf" })
           picker:close()
           start_golf_mode(origin_buf, start_lines, target_lines, config)
         else
-          vim.notify("DEBUG: No commit found in item", vim.log.levels.WARN, { title = "buffergolf" })
+          vim.notify("Failed to resolve commit for selection", vim.log.levels.WARN, { title = "buffergolf" })
         end
       end,
     })
