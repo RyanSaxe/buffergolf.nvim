@@ -1,7 +1,11 @@
 local timer = require("buffergolf.timer")
 local keystroke = require("buffergolf.keystroke")
+local buffer = require("buffergolf.buffer")
 
 local M = {}
+
+local buf_valid = buffer.buf_valid
+local win_valid = buffer.win_valid
 
 -- Helper function to temporarily disable keystroke tracking
 -- Usage: with_keys_disabled(session, function() ... end)
@@ -29,75 +33,6 @@ end
 
 local sessions_by_origin = {}
 local sessions_by_practice = {}
-
-local function buf_valid(buf)
-  return type(buf) == "number" and vim.api.nvim_buf_is_valid(buf)
-end
-
-local function win_valid(win)
-  return type(win) == "number" and vim.api.nvim_win_is_valid(win)
-end
-
-local function copy_indent_options(origin, target)
-  -- Keep indentation behavior in the practice buffer aligned with the source buffer.
-  local opts = {
-    "expandtab",
-    "tabstop",
-    "softtabstop",
-    "shiftwidth",
-    "autoindent",
-    "smartindent",
-    "cindent",
-    "indentexpr",
-    "copyindent",
-    "preserveindent",
-  }
-
-  for _, opt in ipairs(opts) do
-    local ok, value = pcall(vim.api.nvim_get_option_value, opt, { buf = origin })
-    if ok then
-      pcall(vim.api.nvim_set_option_value, opt, value, { buf = target })
-    end
-  end
-end
-
--- Generate buffer names for buffergolf practice and reference buffers
--- Suffix should be ".golf" for practice or ".golf.ref" for reference
-local function generate_buffer_name(origin_bufnr, suffix)
-  local origin_name = vim.api.nvim_buf_get_name(origin_bufnr)
-
-  if origin_name == "" then
-    -- Unnamed buffer - use filetype or default
-    local ft = vim.api.nvim_get_option_value("filetype", { buf = origin_bufnr })
-    local ext = ft ~= "" and ft or "txt"
-    return "unnamed" .. suffix .. "." .. ext
-  end
-
-  -- Named buffer - insert suffix before extension
-  local dir = vim.fn.fnamemodify(origin_name, ":h")
-  local basename = vim.fn.fnamemodify(origin_name, ":t:r")
-  local ext = vim.fn.fnamemodify(origin_name, ":e")
-
-  local name
-  if ext ~= "" then
-    name = dir .. "/" .. basename .. suffix .. "." .. ext
-  else
-    name = dir .. "/" .. basename .. suffix
-  end
-
-  -- Check if a .golf.* file exists on disk (should never happen)
-  if vim.fn.filereadable(name) == 1 then
-    vim.notify(
-      "WARNING: Found existing file '" .. name .. "' on disk. " ..
-      "BufferGolf practice/reference buffers should be temporary and never exist as real files. " ..
-      "Please remove or rename this file.",
-      vim.log.levels.ERROR,
-      { title = "buffergolf" }
-    )
-  end
-
-  return name
-end
 
 local function get_session(bufnr)
   return sessions_by_origin[bufnr] or sessions_by_practice[bufnr]
@@ -349,80 +284,6 @@ local function attach_change_watcher(session)
   end
 end
 
-local function disable_diagnostics(bufnr)
-  if type(vim.diagnostic) == "table" and vim.diagnostic.enable then
-    -- Use the new API: vim.diagnostic.enable(false, {bufnr = bufnr})
-    pcall(vim.diagnostic.enable, false, { bufnr = bufnr })
-  elseif type(vim.diagnostic) == "table" and vim.diagnostic.disable then
-    -- Fallback for older neovim versions
-    pcall(vim.diagnostic.disable, bufnr)
-  end
-end
-
-local function disable_inlay_hints(bufnr)
-  local ih = vim.lsp and vim.lsp.inlay_hint
-  if ih == nil then
-    return
-  end
-
-  if type(ih) == "table" then
-    if ih.enable then
-      pcall(ih.enable, false, { bufnr = bufnr })
-    elseif ih.disable then
-      pcall(ih.disable, bufnr)
-    end
-  elseif type(ih) == "function" then
-    pcall(ih, bufnr, false)
-  end
-end
-
-local function disable_autopairs(bufnr)
-  -- Disable nvim-autopairs
-  pcall(vim.api.nvim_buf_set_var, bufnr, "autopairs_enabled", false)
-  -- Disable mini.pairs
-  pcall(vim.api.nvim_buf_set_var, bufnr, "minipairs_disable", true)
-end
-
-local function apply_buffer_defaults(session)
-  local buf = session.practice_buf
-
-  if session.config.disable_diagnostics ~= false then
-    disable_diagnostics(buf)
-  end
-  if session.config.disable_inlay_hints ~= false then
-    disable_inlay_hints(buf)
-  end
-  if session.config.disable_autopairs ~= false then
-    disable_autopairs(buf)
-  end
-end
-
-local function disable_matchparen(session)
-  if session.config.disable_matchparen == false then
-    return
-  end
-
-  local win = session.practice_win
-  if not win_valid(win) then
-    return
-  end
-
-  local ok, current = pcall(vim.api.nvim_get_option_value, "winhighlight", { win = win })
-  local value = ok and current or ""
-  if value ~= "" then
-    if value:match("MatchParen:") then
-      value = value:gsub("MatchParen:[^,%s]+", "MatchParen:None")
-    else
-      value = value .. ",MatchParen:None"
-    end
-  else
-    value = "MatchParen:None"
-  end
-  vim.api.nvim_set_option_value("winhighlight", value, { win = win })
-
-  pcall(vim.api.nvim_buf_set_var, session.practice_buf, "matchup_matchparen_enabled", 0)
-end
-
 local function clear_state(session)
   timer.cleanup(session)
   keystroke.cleanup_session(session)
@@ -454,7 +315,7 @@ local function setup_autocmds(session)
     group = aug,
     buffer = session.practice_buf,
     callback = function()
-      apply_buffer_defaults(session)
+      buffer.apply_defaults(session)
     end,
   })
 
@@ -500,7 +361,7 @@ local function setup_autocmds(session)
     group = aug,
     buffer = session.practice_buf,
     callback = function()
-      apply_buffer_defaults(session)
+      buffer.apply_defaults(session)
     end,
   })
 
@@ -532,7 +393,7 @@ local function create_reference_window(session)
   local ref_buf = vim.api.nvim_create_buf(false, true)
 
   -- Set buffer name for better UX in statuslines and buffer lists
-  local ref_name = generate_buffer_name(session.origin_buf, ".golf.ref")
+  local ref_name = buffer.generate_buffer_name(session.origin_buf, ".golf.ref")
   vim.api.nvim_buf_set_name(ref_buf, ref_name)
 
   vim.api.nvim_buf_set_lines(ref_buf, 0, -1, false, session.reference_lines)
@@ -845,42 +706,6 @@ local function setup_golf_navigation(session)
   end
 end
 
-local function normalize_reference_lines(lines, bufnr)
-  -- If expandtab is on, convert tabs to spaces in reference lines
-  -- This ensures byte-by-byte comparison works with autoindent
-  local ok, expandtab = pcall(vim.api.nvim_get_option_value, "expandtab", { buf = bufnr })
-  if not ok or not expandtab then
-    return lines
-  end
-
-  local ok_ts, tabstop = pcall(vim.api.nvim_get_option_value, "tabstop", { buf = bufnr })
-  if not ok_ts then
-    tabstop = 8
-  end
-
-  local normalized = {}
-  for _, line in ipairs(lines) do
-    if line:find("\t") then
-      local result = {}
-      local col = 0
-      for char in line:gmatch(".") do
-        if char == "\t" then
-          local spaces = tabstop - (col % tabstop)
-          table.insert(result, string.rep(" ", spaces))
-          col = col + spaces
-        else
-          table.insert(result, char)
-          col = col + 1
-        end
-      end
-      table.insert(normalized, table.concat(result))
-    else
-      table.insert(normalized, line)
-    end
-  end
-  return normalized
-end
-
 function M.start(origin_bufnr, config, target_lines)
   if sessions_by_origin[origin_bufnr] then
     return
@@ -892,12 +717,12 @@ function M.start(origin_bufnr, config, target_lines)
   end
 
   -- Normalize tabs to spaces if expandtab is on
-  reference = normalize_reference_lines(reference, origin_bufnr)
+  reference = buffer.normalize_lines(reference, origin_bufnr)
 
   local practice_buf = vim.api.nvim_create_buf(false, false)
 
   -- Set buffer name for better UX in statuslines and buffer lists
-  local practice_name = generate_buffer_name(origin_bufnr, ".golf")
+  local practice_name = buffer.generate_buffer_name(origin_bufnr, ".golf")
   vim.api.nvim_buf_set_name(practice_buf, practice_name)
 
   vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = practice_buf })
@@ -912,7 +737,7 @@ function M.start(origin_bufnr, config, target_lines)
     vim.api.nvim_set_option_value("filetype", origin_ft, { buf = practice_buf })
   end
 
-  copy_indent_options(origin_bufnr, practice_buf)
+  buffer.copy_indent_options(origin_bufnr, practice_buf)
 
   local empty_lines = {}
   for _ = 1, #reference do
@@ -947,12 +772,12 @@ function M.start(origin_bufnr, config, target_lines)
   sessions_by_origin[origin_bufnr] = session
   sessions_by_practice[practice_buf] = session
 
-  apply_buffer_defaults(session)
+  buffer.apply_defaults(session)
 
   vim.api.nvim_win_set_buf(current_win, practice_buf)
   session.practice_win = vim.api.nvim_get_current_win()
 
-  disable_matchparen(session)
+  buffer.disable_matchparen(session)
 
   setup_autocmds(session)
   attach_change_watcher(session)
@@ -979,13 +804,13 @@ function M.start_golf(origin_bufnr, start_lines, target_lines, config)
   end
 
   -- Normalize tabs to spaces if expandtab is on
-  reference = normalize_reference_lines(reference, origin_bufnr)
-  start_lines = normalize_reference_lines(start_lines, origin_bufnr)
+  reference = buffer.normalize_lines(reference, origin_bufnr)
+  start_lines = buffer.normalize_lines(start_lines, origin_bufnr)
 
   local practice_buf = vim.api.nvim_create_buf(false, false)
 
   -- Set buffer name for better UX in statuslines and buffer lists
-  local practice_name = generate_buffer_name(origin_bufnr, ".golf")
+  local practice_name = buffer.generate_buffer_name(origin_bufnr, ".golf")
   vim.api.nvim_buf_set_name(practice_buf, practice_name)
 
   vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = practice_buf })
@@ -1000,7 +825,7 @@ function M.start_golf(origin_bufnr, start_lines, target_lines, config)
     vim.api.nvim_set_option_value("filetype", origin_ft, { buf = practice_buf })
   end
 
-  copy_indent_options(origin_bufnr, practice_buf)
+  buffer.copy_indent_options(origin_bufnr, practice_buf)
 
   -- Set the starting lines (not empty for golf mode)
   vim.api.nvim_buf_set_lines(practice_buf, 0, -1, true, start_lines)
@@ -1030,12 +855,12 @@ function M.start_golf(origin_bufnr, start_lines, target_lines, config)
   sessions_by_origin[origin_bufnr] = session
   sessions_by_practice[practice_buf] = session
 
-  apply_buffer_defaults(session)
+  buffer.apply_defaults(session)
 
   vim.api.nvim_win_set_buf(current_win, practice_buf)
   session.practice_win = vim.api.nvim_get_current_win()
 
-  disable_matchparen(session)
+  buffer.disable_matchparen(session)
 
   setup_autocmds(session)
   attach_change_watcher(session)

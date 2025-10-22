@@ -1,14 +1,10 @@
 local stats = require("buffergolf.stats")
+local buffer = require("buffergolf.buffer")
 
 local M = {}
 
-local function win_valid(win)
-  return type(win) == "number" and vim.api.nvim_win_is_valid(win)
-end
-
-local function buf_valid(buf)
-  return type(buf) == "number" and vim.api.nvim_buf_is_valid(buf)
-end
+local buf_valid = buffer.buf_valid
+local win_valid = buffer.win_valid
 
 local function format_time(seconds)
   local minutes = math.floor(seconds / 60)
@@ -40,64 +36,6 @@ local function get_display_time(session)
   end
 end
 
-local function strip_trailing_empty_lines(lines)
-  -- Remove trailing empty lines to allow Enter-created lines
-  -- without blocking completion
-  local last_non_empty = 0
-  for i = #lines, 1, -1 do
-    if lines[i] ~= "" then
-      last_non_empty = i
-      break
-    end
-  end
-
-  if last_non_empty == 0 then
-    return {}
-  end
-
-  local result = {}
-  for i = 1, last_non_empty do
-    table.insert(result, lines[i])
-  end
-  return result
-end
-
-local function normalize_lines(lines, bufnr)
-  -- Convert tabs to spaces if expandtab is on
-  -- This ensures consistent comparison with reference lines
-  local ok, expandtab = pcall(vim.api.nvim_get_option_value, "expandtab", { buf = bufnr })
-  if not ok or not expandtab then
-    return lines
-  end
-
-  local ok_ts, tabstop = pcall(vim.api.nvim_get_option_value, "tabstop", { buf = bufnr })
-  if not ok_ts then
-    tabstop = 8
-  end
-
-  local normalized = {}
-  for _, line in ipairs(lines) do
-    if line:find("\t") then
-      local result = {}
-      local col = 0
-      for char in line:gmatch(".") do
-        if char == "\t" then
-          local spaces = tabstop - (col % tabstop)
-          table.insert(result, string.rep(" ", spaces))
-          col = col + spaces
-        else
-          table.insert(result, char)
-          col = col + 1
-        end
-      end
-      table.insert(normalized, table.concat(result))
-    else
-      table.insert(normalized, line)
-    end
-  end
-  return normalized
-end
-
 local function check_completion(session)
   if not buf_valid(session.practice_buf) or not session.reference_lines then
     return false
@@ -109,11 +47,11 @@ local function check_completion(session)
   end
 
   -- Normalize actual lines to match reference line normalization
-  actual_lines = normalize_lines(actual_lines, session.practice_buf)
+  actual_lines = buffer.normalize_lines(actual_lines, session.practice_buf)
 
   -- Strip trailing empty lines from both actual and reference
-  actual_lines = strip_trailing_empty_lines(actual_lines)
-  local reference_lines = strip_trailing_empty_lines(session.reference_lines)
+  actual_lines = buffer.strip_trailing_empty_lines(actual_lines)
+  local reference_lines = buffer.strip_trailing_empty_lines(session.reference_lines)
 
   -- Check if line counts match
   if #actual_lines ~= #reference_lines then
