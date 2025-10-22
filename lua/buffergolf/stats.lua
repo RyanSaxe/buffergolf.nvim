@@ -251,6 +251,9 @@ function M.calculate_par(session_or_reference_lines, start_lines)
 end
 
 function M.get_keystroke_count(session)
+  if session and session.timer_state and session.timer_state.frozen_keystrokes ~= nil then
+    return session.timer_state.frozen_keystrokes
+  end
   return keystroke.get_count(session)
 end
 

@@ -1,5 +1,6 @@
 local stats = require("buffergolf.stats")
 local buffer = require("buffergolf.buffer")
+local keystroke = require("buffergolf.keystroke")
 
 local M = {}
 
@@ -75,6 +76,7 @@ local function freeze_stats(session)
 
   session.timer_state.frozen_time = get_display_time(session)
   session.timer_state.frozen_wpm = stats.calculate_wpm(session)
+  session.timer_state.frozen_keystrokes = stats.get_keystroke_count(session)
 end
 
 local function complete_session(session, reason)
@@ -86,12 +88,15 @@ local function complete_session(session, reason)
   -- Freeze stats first
   freeze_stats(session)
 
-  -- Mark as completed
+  -- Mark as completed/locked and stop counting keys
   session.timer_state.completed = true
+  session.timer_state.locked = true
+  keystroke.set_tracking_enabled(session, false)
 
   -- Lock the buffer to prevent further edits
   if buf_valid(session.practice_buf) then
     pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = session.practice_buf })
+    pcall(vim.api.nvim_set_option_value, "readonly", true, { buf = session.practice_buf })
   end
 
   -- Notify user based on completion reason
@@ -440,6 +445,7 @@ function M.start_countdown(session, seconds)
   session.timer_state.completed = false
   session.timer_state.frozen_time = nil
   session.timer_state.frozen_wpm = nil
+  session.timer_state.frozen_keystrokes = nil
 
   -- Handle nil or 0 as count-up mode
   if not seconds or seconds == 0 then
@@ -455,7 +461,10 @@ function M.start_countdown(session, seconds)
   -- Unlock buffer if it was previously locked
   if buf_valid(session.practice_buf) then
     pcall(vim.api.nvim_set_option_value, "modifiable", true, { buf = session.practice_buf })
+    pcall(vim.api.nvim_set_option_value, "readonly", false, { buf = session.practice_buf })
   end
+
+  keystroke.set_tracking_enabled(session, true)
 
   -- Timer will start on first edit
   M.update_stats_float(session)
@@ -470,6 +479,7 @@ function M.init(session)
     completed = false,
     frozen_time = nil,
     frozen_wpm = nil,
+    frozen_keystrokes = nil,
     stats_win = nil,
     stats_buf = nil,
     update_timer = nil,

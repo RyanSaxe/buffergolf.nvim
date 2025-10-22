@@ -248,6 +248,10 @@ local function schedule_refresh(session)
       return
     end
 
+    if session.timer_state and (session.timer_state.locked or session.timer_state.completed) then
+      return
+    end
+
     refresh_visuals(session)
   end)
 end
@@ -930,6 +934,7 @@ function M.reset_to_start(bufnr)
 
   -- Ensure buffer is modifiable before resetting
   vim.api.nvim_set_option_value("modifiable", true, { buf = session.practice_buf })
+  vim.api.nvim_set_option_value("readonly", false, { buf = session.practice_buf })
 
   -- Reset buffer content based on mode
   if session.mode == "typing" then
@@ -954,6 +959,7 @@ function M.reset_to_start(bufnr)
 
   -- Reset keystroke count
   keystroke.reset_count(session)
+  keystroke.set_tracking_enabled(session, true)
 
   -- Clear all ghost marks and mismatches
   if session.ghost_marks then
@@ -971,6 +977,15 @@ function M.reset_to_start(bufnr)
   -- Unlock buffer in case it was locked
   if buf_valid(session.practice_buf) then
     pcall(vim.api.nvim_set_option_value, "modifiable", true, { buf = session.practice_buf })
+    pcall(vim.api.nvim_set_option_value, "readonly", false, { buf = session.practice_buf })
+  end
+
+  if session.timer_state then
+    session.timer_state.locked = false
+    session.timer_state.completed = false
+    session.timer_state.frozen_time = nil
+    session.timer_state.frozen_wpm = nil
+    session.timer_state.frozen_keystrokes = nil
   end
 
   -- Refresh visuals to recreate ghost text and highlights
