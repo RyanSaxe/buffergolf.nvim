@@ -152,4 +152,29 @@ function M.is_tracking_enabled(session)
   return state and state.tracking_enabled or false
 end
 
+function M.with_keys_disabled(session, fn)
+  if not session then
+    local ok, result = pcall(fn)
+    if not ok then
+      error(result)
+    end
+    return result
+  end
+
+  local was_enabled = M.is_tracking_enabled(session)
+  M.set_tracking_enabled(session, false)
+
+  local ok, result = pcall(fn)
+
+  if was_enabled then
+    M.set_tracking_enabled(session, true)
+  end
+
+  if not ok then
+    error(result)
+  end
+
+  return result
+end
+
 return M

@@ -306,6 +306,15 @@ When in golf mode (practicing code transformation), these buffer-local commands 
 6. **Completion Check**: Compares buffer to reference on every change
 7. **Cleanup**: Removes extmarks, highlights, and autocommands on session end
 
+## Module Architecture
+
+- `lua/buffergolf/session.lua` orchestrates session lifecycle, wiring timer and keystroke modules.
+- `lua/buffergolf/visual.lua` manages ghost text extmarks, mismatch highlights, and buffer change watchers.
+- `lua/buffergolf/golf.lua` handles golf-mode reference windows, mini.diff integration, and synchronized navigation.
+- `lua/buffergolf/buffer.lua` provides shared buffer/window helpers reused across modules.
+- `lua/buffergolf/keystroke.lua` tracks command initiations, including the shared `with_keys_disabled` helper.
+- `lua/buffergolf/timer.lua` renders timer overlays and session statistics.
+
 ## Buffer Variables
 
 The plugin sets `vim.b.buffergolf_practice = true` in practice buffers. Use this to conditionally disable conflicting plugins:

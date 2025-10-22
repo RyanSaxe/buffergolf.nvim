@@ -36,18 +36,18 @@
 
 ### Phase 3 – Extract focused session submodules
 
-- [ ] 3.1 Create `lua/buffergolf/visual.lua` for ghost text management (`clear_ghost_mark`, `expand_ghost_text`, `set_ghost_mark`, `refresh_visuals`, `attach_change_watcher`).
-- [ ] 3.2 Create `lua/buffergolf/golf.lua` for golf-mode-specific behaviour (`create_reference_window`, `setup_mini_diff_for_golf`, `setup_golf_navigation`, `goto_hunk_sync`).
-- [ ] 3.3 Keep session orchestration (`sessions_by_origin`, lifecycle functions, keystroke gating, timer hooks) inside a slimmed `session.lua` that wires together `buffer`, `visual`, `golf`, `timer`, and `keystroke`.
-- [ ] 3.4 Replace direct calls in `session.lua` with the new module APIs and ensure module requires are updated at the top of the file.
-- [ ] 3.5 Ensure `with_keys_disabled` remains available where navigation needs to avoid counting keystrokes and lives in whichever module now owns keystroke helpers (likely `keystroke.lua`).
+- [x] 3.1 Create `lua/buffergolf/visual.lua` for ghost text management (`clear_ghost_mark`, `expand_ghost_text`, `set_ghost_mark`, `refresh_visuals`, `attach_change_watcher`).
+- [x] 3.2 Create `lua/buffergolf/golf.lua` for golf-mode-specific behaviour (`create_reference_window`, `setup_mini_diff_for_golf`, `setup_golf_navigation`, `goto_hunk_sync`).
+- [x] 3.3 Keep session orchestration (`sessions_by_origin`, lifecycle functions, keystroke gating, timer hooks) inside a slimmed `session.lua` that wires together `buffer`, `visual`, `golf`, `timer`, and `keystroke`.
+- [x] 3.4 Replace direct calls in `session.lua` with the new module APIs and ensure module requires are updated at the top of the file.
+- [x] 3.5 Ensure `with_keys_disabled` remains available where navigation needs to avoid counting keystrokes and lives in whichever module now owns keystroke helpers (likely `keystroke.lua`).
 
 ### Phase 4 – Polish and verification
 
-- [ ] 4.1 Sweep for any leftover references to removed helpers (`debug_keys`, alternative keystroke paths) and clean up dead code.
-- [ ] 4.2 Update documentation (`README.md`) if the public surface or configuration examples mention removed commands or highlight new module responsibilities.
-- [ ] 4.3 Run manual smoke tests: typing mode entry/exit, golf mode with git history selection, countdown timers, and keystroke tracking to confirm behaviour parity.
-- [ ] 4.4 Audit requires to make sure no stale module names remain after the extraction work.
+- [x] 4.1 Sweep for any leftover references to removed helpers (`debug_keys`, alternative keystroke paths) and clean up dead code.
+- [x] 4.2 Update documentation (`README.md`) if the public surface or configuration examples mention removed commands or highlight new module responsibilities.
+- [ ] 4.3 Run manual smoke tests: typing mode entry/exit, golf mode with git history selection, countdown timers, and keystroke tracking to confirm behaviour parity. _(Pending manual run in this environment.)_
+- [x] 4.4 Audit requires to make sure no stale module names remain after the extraction work.
 
 ## Expected Outcomes
 
