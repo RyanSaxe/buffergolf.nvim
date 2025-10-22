@@ -331,7 +331,7 @@ function M.update_stats_float(session)
 
   -- Get keystroke and par info
   local keystrokes = stats.get_keystroke_count(session)
-  local par = stats.calculate_par(session)  -- Pass entire session for mode-aware par calculation
+  local par = session.par or 0  -- Use cached par from session initialization
 
   -- Format time with icon and countdown indicator
   local time_display

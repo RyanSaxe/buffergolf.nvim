@@ -1022,6 +1022,17 @@ function M.start_golf(origin_bufnr, start_lines, target_lines, config)
 
   timer.init(session)
   refresh_visuals(session)
+
+  -- Calculate par once after mini.diff has had time to process hunks
+  vim.defer_fn(function()
+    if not session or not buf_valid(session.practice_buf) then
+      return
+    end
+    local stats = require("buffergolf.stats")
+    session.par = stats.calculate_par(session)
+    -- Trigger a visual refresh to update the display with the calculated par
+    refresh_visuals(session)
+  end, 150)  -- Slightly longer delay than overlay toggle to ensure hunks are ready
 end
 
 function M.stop(bufnr)

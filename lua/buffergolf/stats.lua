@@ -101,12 +101,12 @@ local function calculate_typing_mode_par(reference_lines)
 end
 
 -- Calculate par for golf mode using mini.diff hunks
-local function calculate_golf_par_from_hunks(practice_buf, reference_buf)
-  -- Get buffer lines for character counting
-  local ok_practice, practice_lines = pcall(vim.api.nvim_buf_get_lines, practice_buf, 0, -1, false)
-  local ok_reference, reference_lines = pcall(vim.api.nvim_buf_get_lines, reference_buf, 0, -1, false)
+local function calculate_golf_par_from_hunks(session)
+  -- Use the original start and reference lines from session, not current buffer state
+  local practice_lines = session.start_lines
+  local reference_lines = session.reference_lines
 
-  if not ok_practice or not ok_reference then
+  if not practice_lines or not reference_lines then
     return nil  -- Signal failure, caller should use fallback
   end
 
@@ -116,10 +116,23 @@ local function calculate_golf_par_from_hunks(practice_buf, reference_buf)
     return nil  -- Signal failure, caller should use fallback
   end
 
-  local buf_data = minidiff.get_buf_data(reference_buf)
+  local buf_data = minidiff.get_buf_data(session.reference_buf)
   if not buf_data or not buf_data.hunks or #buf_data.hunks == 0 then
     -- No hunks means buffers are identical - already at goal
     return 0
+  end
+
+  -- Debug: Save hunk data for analysis
+  local debug_file = io.open('.test_files/debug_hunks.json', 'w')
+  if debug_file then
+    local debug_data = {
+      hunks = buf_data.hunks,
+      practice_lines = practice_lines,
+      reference_lines = reference_lines,
+      num_hunks = #buf_data.hunks
+    }
+    debug_file:write(vim.json.encode(debug_data))
+    debug_file:close()
   end
 
   -- Calculate hunk-based par
@@ -127,16 +140,21 @@ local function calculate_golf_par_from_hunks(practice_buf, reference_buf)
 
   for _, hunk in ipairs(buf_data.hunks) do
     if hunk.type == "delete" then
-      -- Each line deletion costs 2 keystrokes (dd)
-      hunk_par = hunk_par + (hunk.buf_count * 2)
+      -- Lines exist in the starting text (reference) but not in the goal buffer.
+      -- Each requires a `dd` (2 keys) from the practice buffer.
+      hunk_par = hunk_par + ((hunk.ref_count or 0) * 2)
 
     elseif hunk.type == "add" then
-      -- Line addition: o (1 key) + content for each line
-      for i = 1, hunk.ref_count do
-        local line_idx = (hunk.ref_start or 1) + i - 1
-        if reference_lines[line_idx] then
-          local trimmed = trim_whitespace(reference_lines[line_idx])
+      -- Lines exist in the goal buffer but not in the starting text.
+      -- Each line needs an insertion: o/append (1 key) + content.
+      for i = 1, (hunk.buf_count or 0) do
+        local line_idx = (hunk.buf_start or 1) + i - 1
+        local target_line = reference_lines[line_idx]
+        if target_line then
+          local trimmed = trim_whitespace(target_line)
           hunk_par = hunk_par + 1 + #trimmed
+        else
+          hunk_par = hunk_par + 1
         end
       end
 
@@ -144,30 +162,31 @@ local function calculate_golf_par_from_hunks(practice_buf, reference_buf)
       -- For changed lines, calculate character-level distance
       -- But if too different, dd + rewrite might be cheaper
       local change_par = 0
+      local max_count = math.max(hunk.buf_count or 0, hunk.ref_count or 0)
 
-      for i = 1, math.max(hunk.buf_count, hunk.ref_count) do
-        local buf_line_idx = (hunk.buf_start or 1) + i - 1
-        local ref_line_idx = (hunk.ref_start or 1) + i - 1
+      for i = 1, max_count do
+        local start_idx = (hunk.ref_start or 1) + i - 1
+        local goal_idx = (hunk.buf_start or 1) + i - 1
 
-        local buf_line = practice_lines[buf_line_idx]
-        local ref_line = reference_lines[ref_line_idx]
+        local start_line = practice_lines[start_idx]
+        local goal_line = reference_lines[goal_idx]
 
-        if buf_line and ref_line then
+        if start_line and goal_line then
           -- Both lines exist: calculate char-level edit distance
-          local buf_trimmed = trim_whitespace(buf_line)
-          local ref_trimmed = trim_whitespace(ref_line)
-          local char_dist = calculate_string_distance(buf_trimmed, ref_trimmed)
+          local start_trimmed = trim_whitespace(start_line)
+          local goal_trimmed = trim_whitespace(goal_line)
+          local char_dist = calculate_string_distance(start_trimmed, goal_trimmed)
 
           -- Compare with dd + rewrite cost
-          local rewrite_cost = 2 + #ref_trimmed
+          local rewrite_cost = 2 + #goal_trimmed
           change_par = change_par + math.min(char_dist, rewrite_cost)
 
-        elseif ref_line then
+        elseif goal_line then
           -- Need to add this line: o + content
-          local ref_trimmed = trim_whitespace(ref_line)
-          change_par = change_par + 1 + #ref_trimmed
+          local goal_trimmed = trim_whitespace(goal_line)
+          change_par = change_par + 1 + #goal_trimmed
 
-        elseif buf_line then
+        elseif start_line then
           -- Need to delete this line: dd
           change_par = change_par + 2
         end
@@ -214,7 +233,7 @@ function M.calculate_par(session_or_reference_lines, start_lines)
 
   -- For golf mode, use mini.diff hunks if available
   if mode == "golf" and session and session.practice_buf and session.reference_buf then
-    local par = calculate_golf_par_from_hunks(session.practice_buf, session.reference_buf)
+    local par = calculate_golf_par_from_hunks(session)
 
     -- If hunk-based calculation failed or returned nil, use line-level edit distance as fallback
     if par == nil and start_lines and reference_lines then
@@ -314,7 +333,7 @@ function M.get_stats(session)
   local correct_chars = M.count_correct_characters(session)
   local wpm = M.calculate_wpm(session)
   local keystrokes = M.get_keystroke_count(session)
-  local par = M.calculate_par(session)  -- Pass entire session for mode-aware par calculation
+  local par = session.par or M.calculate_par(session)  -- Use cached par, fallback to calculate
 
   return {
     correct_chars = correct_chars,
