@@ -23,7 +23,7 @@ local function calculate_string_distance(str1, str2)
   -- Fill DP table
   for i = 1, m do
     for j = 1, n do
-      local cost = (str1:sub(i, i) == str2:sub(j, j)) and 0 or 1
+      local cost = (str1:byte(i) == str2:byte(j)) and 0 or 1
       dp[i][j] = math.min(
         dp[i-1][j] + 1,      -- deletion
         dp[i][j-1] + 1,      -- insertion
