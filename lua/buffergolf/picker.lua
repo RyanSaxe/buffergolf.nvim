@@ -242,8 +242,8 @@ local function select_git_commit_with_preview(origin_buf, target_lines, config)
       file = filepath,
       confirm = function(picker, item)
         if item and item.commit then
-          local get_cmd = string.format("git show %s:%s 2>/dev/null", item.commit, relative_path)
-          local start_lines = vim.fn.systemlist(get_cmd)
+          local git_object = string.format("%s:%s", item.commit, relative_path)
+          local start_lines = vim.fn.systemlist({ "git", "show", git_object })
 
           if vim.v.shell_error ~= 0 then
             vim.notify("Failed to get file at commit " .. item.commit, vim.log.levels.ERROR, { title = "buffergolf" })
@@ -259,8 +259,16 @@ local function select_git_commit_with_preview(origin_buf, target_lines, config)
     })
   else
     -- Native fallback
-    local cmd = string.format("git log --oneline --follow -n 20 -- %s 2>/dev/null", vim.fn.shellescape(relative_path))
-    local commits = vim.fn.systemlist(cmd)
+    local commits = vim.fn.systemlist({
+      "git",
+      "log",
+      "--oneline",
+      "--follow",
+      "-n",
+      "20",
+      "--",
+      relative_path,
+    })
 
     if vim.v.shell_error ~= 0 or #commits == 0 then
       vim.notify("No git history found for this file", vim.log.levels.WARN, { title = "buffergolf" })
@@ -283,8 +291,8 @@ local function select_git_commit_with_preview(origin_buf, target_lines, config)
       format_item = function(item) return item.label end,
     }, function(choice)
       if choice then
-        local get_cmd = string.format("git show %s:%s 2>/dev/null", choice.value, relative_path)
-        local start_lines = vim.fn.systemlist(get_cmd)
+        local git_object = string.format("%s:%s", choice.value, relative_path)
+        local start_lines = vim.fn.systemlist({ "git", "show", git_object })
 
         if vim.v.shell_error ~= 0 then
           vim.notify("Failed to get file at commit " .. choice.value, vim.log.levels.ERROR, { title = "buffergolf" })

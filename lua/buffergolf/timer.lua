@@ -7,6 +7,168 @@ local M = {}
 local buf_valid = buffer.buf_valid
 local win_valid = buffer.win_valid
 
+local function clamp(value, min_value, max_value)
+  if value < min_value then
+    return min_value
+  end
+  if value > max_value then
+    return max_value
+  end
+  return value
+end
+
+local function compute_stats_geometry(session)
+  if not win_valid(session.practice_win) then
+    return nil
+  end
+
+  local win_width = vim.api.nvim_win_get_width(session.practice_win)
+  local win_height = vim.api.nvim_win_get_height(session.practice_win)
+
+  -- Require a minimally reasonable area for the float
+  if win_width < 6 or win_height < 2 then
+    return nil
+  end
+
+  local stats_config = session.config.stats_float or {}
+  local offset_x = math.max(0, stats_config.offset_x or 2)
+  local offset_y = math.max(0, stats_config.offset_y or 1)
+  local position = stats_config.position or "bottom-right"
+
+  local preferred_width = 23
+  local preferred_height = 3
+  local min_height = 2
+
+  local width = math.max(6, math.min(preferred_width, win_width))
+  local height = math.max(min_height, math.min(preferred_height, win_height))
+
+  local max_col = math.max(0, win_width - width)
+  local max_row = math.max(0, win_height - height)
+
+  local row
+  local col
+  if position == "bottom-left" then
+    row = clamp(max_row - offset_y, 0, max_row)
+    col = clamp(offset_x, 0, max_col)
+  elseif position == "top-right" then
+    row = clamp(offset_y, 0, max_row)
+    col = clamp(max_col - offset_x, 0, max_col)
+  elseif position == "top-left" then
+    row = clamp(offset_y, 0, max_row)
+    col = clamp(offset_x, 0, max_col)
+  else
+    row = clamp(max_row - offset_y, 0, max_row)
+    col = clamp(max_col - offset_x, 0, max_col)
+  end
+
+  local separator_width = 1
+  if width < separator_width + 2 then
+    separator_width = math.max(1, width - 2)
+  end
+
+  local available = width - separator_width
+  if available < 2 then
+    available = 2
+  end
+
+  local left_width = math.floor(available / 2)
+  local right_width = available - left_width
+  if left_width < 1 then
+    left_width = 1
+  end
+  if right_width < 1 then
+    right_width = 1
+  end
+
+  return {
+    width = width,
+    height = height,
+    row = row,
+    col = col,
+    left_width = left_width,
+    right_width = right_width,
+    separator_width = separator_width,
+    has_separator_row = height >= 3,
+  }
+end
+
+local function truncate_to_width(str, width)
+  if width <= 0 then
+    return "", 0
+  end
+
+  local length = vim.fn.strchars(str)
+  local parts = {}
+  local consumed = 0
+  local idx = 0
+
+  while idx < length and consumed < width do
+    local ch = vim.fn.strcharpart(str, idx, 1)
+    if ch == "" then
+      break
+    end
+    local ch_width = vim.fn.strdisplaywidth(ch)
+    if consumed + ch_width > width then
+      break
+    end
+    table.insert(parts, ch)
+    consumed = consumed + ch_width
+    idx = idx + 1
+  end
+
+  return table.concat(parts), consumed
+end
+
+local function pad_center(str, width)
+  if width <= 0 then
+    return ""
+  end
+
+  local fitted, display_width = truncate_to_width(str, width)
+  local padding = width - display_width
+  local left_pad = math.floor(padding / 2)
+  local right_pad = padding - left_pad
+
+  return string.rep(" ", left_pad) .. fitted .. string.rep(" ", right_pad)
+end
+
+local function pad_right(str, width)
+  local display_width = vim.fn.strdisplaywidth(str)
+  if display_width >= width then
+    local fitted = truncate_to_width(str, width)
+    return fitted
+  end
+  return str .. string.rep(" ", width - display_width)
+end
+
+local function content_column_range(text, offset)
+  local length = vim.fn.strchars(text)
+  local col = 0
+  local start_col = nil
+  local end_col = nil
+
+  for i = 0, length - 1 do
+    local ch = vim.fn.strcharpart(text, i, 1)
+    if ch == "" then
+      break
+    end
+    local width = vim.fn.strdisplaywidth(ch)
+    if not start_col and ch:match("%S") then
+      start_col = col
+    end
+    if ch:match("%S") then
+      end_col = col + width
+    end
+    col = col + width
+  end
+
+  if not start_col or not end_col then
+    return nil, nil
+  end
+
+  return offset + start_col, offset + end_col
+end
+
 local function format_time(seconds)
   local minutes = math.floor(seconds / 60)
   local secs = seconds % 60
@@ -188,53 +350,26 @@ local function create_stats_float(session)
   -- Setup highlights
   setup_highlights(session.config)
 
+  local geometry = compute_stats_geometry(session)
+  if not geometry then
+    session.timer_state.stats_win = nil
+    session.timer_state.stats_buf = nil
+    session.timer_state.geometry = nil
+    return
+  end
+
   -- Create buffer for stats display
   local stats_buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = stats_buf })
   vim.api.nvim_set_option_value("buftype", "nofile", { buf = stats_buf })
 
-  -- Get practice window dimensions
-  local win_width = vim.api.nvim_win_get_width(session.practice_win)
-  local win_height = vim.api.nvim_win_get_height(session.practice_win)
-
-  -- Get config for positioning
-  local stats_config = session.config.stats_float or {}
-  local position = stats_config.position or "bottom-right"
-  local offset_x = stats_config.offset_x or 2
-  local offset_y = stats_config.offset_y or 1
-
-  -- Grid dimensions (2x2 grid with borders)
-  local float_width = 23  -- Width for 2x2 grid
-  local float_height = 3   -- 3 lines: top row, divider, bottom row
-
-  -- Calculate position based on config
-  local row, col
-  if position == "bottom-right" then
-    row = win_height - float_height - offset_y
-    col = win_width - float_width - offset_x
-  elseif position == "bottom-left" then
-    row = win_height - float_height - offset_y
-    col = offset_x
-  elseif position == "top-right" then
-    row = offset_y
-    col = win_width - float_width - offset_x
-  elseif position == "top-left" then
-    row = offset_y
-    col = offset_x
-  else
-    -- Default to bottom-right if invalid position
-    row = win_height - float_height - offset_y
-    col = win_width - float_width - offset_x
-  end
-
-  -- Create floating window
   local stats_win = vim.api.nvim_open_win(stats_buf, false, {
     relative = "win",
     win = session.practice_win,
-    width = float_width,
-    height = float_height,
-    row = row,
-    col = col,
+    width = geometry.width,
+    height = geometry.height,
+    row = geometry.row,
+    col = geometry.col,
     anchor = "NW",
     style = "minimal",
     border = "rounded",
@@ -242,15 +377,54 @@ local function create_stats_float(session)
     zindex = 50,
   })
 
-  -- Apply custom highlights
-  vim.api.nvim_set_option_value("winhl", "Normal:BuffergolfStatsFloat,FloatBorder:BuffergolfStatsBorder", { win = stats_win })
+  if stats_win then
+    vim.api.nvim_set_option_value("winhl", "Normal:BuffergolfStatsFloat,FloatBorder:BuffergolfStatsBorder", { win = stats_win })
+  end
 
   session.timer_state.stats_win = stats_win
   session.timer_state.stats_buf = stats_buf
+  session.timer_state.geometry = geometry
 end
 
 function M.update_stats_float(session)
-  if not session.timer_state.stats_buf or not buf_valid(session.timer_state.stats_buf) then
+  if not session.timer_state.stats_buf or not buf_valid(session.timer_state.stats_buf) or
+     not session.timer_state.stats_win or not win_valid(session.timer_state.stats_win) then
+    create_stats_float(session)
+  end
+
+  if not session.timer_state.stats_buf or not buf_valid(session.timer_state.stats_buf) or
+     not session.timer_state.stats_win or not win_valid(session.timer_state.stats_win) then
+    return
+  end
+
+  local geometry = compute_stats_geometry(session)
+  if not geometry then
+    -- Hide the float if the practice window is too small
+    pcall(vim.api.nvim_win_set_config, session.timer_state.stats_win, { hide = true })
+    return
+  end
+
+  session.timer_state.geometry = geometry
+
+  pcall(vim.api.nvim_win_set_config, session.timer_state.stats_win, {
+    relative = "win",
+    win = session.practice_win,
+    width = geometry.width,
+    height = geometry.height,
+    row = geometry.row,
+    col = geometry.col,
+    hide = false,
+  })
+
+  local left_width = geometry.left_width
+  local right_width = geometry.right_width
+  local separator_width = geometry.separator_width
+  local separator_left_pad = math.max(0, math.floor((separator_width - 1) / 2))
+  local separator_right_pad = math.max(0, separator_width - 1 - separator_left_pad)
+  local vertical_separator = string.rep(" ", separator_left_pad) .. "|" .. string.rep(" ", separator_right_pad)
+
+  local stats_buf = session.timer_state.stats_buf
+  if not buf_valid(stats_buf) then
     return
   end
 
@@ -327,34 +501,27 @@ function M.update_stats_float(session)
   local keys_display = string.format("Keys: %d", keystrokes)
 
   -- Pad strings to ensure consistent grid alignment
-  -- Each cell should be 10 chars (23 width - 3 for borders = 20, divided by 2 = 10 per cell)
-  local function pad_center(str, width)
-    local padding = width - vim.fn.strwidth(str)
-    local left_pad = math.floor(padding / 2)
-    local right_pad = padding - left_pad
-    return string.rep(" ", left_pad) .. str .. string.rep(" ", right_pad)
+  time_display = pad_center(time_display, left_width)
+  par_display = pad_center(par_display, right_width)
+  keys_display = pad_center(keys_display, left_width)
+  bottom_right = pad_center(bottom_right, right_width)
+
+  local line_top = pad_right(time_display .. vertical_separator .. par_display, geometry.width)
+  local content_lines = { line_top }
+
+  if geometry.has_separator_row then
+    local horizontal_left = string.rep("-", left_width + separator_left_pad)
+    local horizontal_right = string.rep("-", right_width + separator_right_pad)
+    local horizontal_line = pad_right(horizontal_left .. "+" .. horizontal_right, geometry.width)
+    table.insert(content_lines, horizontal_line)
   end
 
-  time_display = pad_center(time_display, 10)
-  par_display = pad_center(par_display, 10)
-  keys_display = pad_center(keys_display, 10)
-  bottom_right = pad_center(bottom_right, 10)
+  local line_bottom = pad_right(keys_display .. vertical_separator .. bottom_right, geometry.width)
+  table.insert(content_lines, line_bottom)
 
-  -- Create the 2x2 grid with box drawing characters
-  local grid_lines = {
-    "┌──────────┬──────────┐",
-    "│" .. time_display .. "│" .. par_display .. "│",
-    "├──────────┼──────────┤",
-    "│" .. keys_display .. "│" .. bottom_right .. "│",
-    "└──────────┴──────────┘",
-  }
-
-  -- Only use the content lines (skip the border lines since nvim adds its own rounded border)
-  local content_lines = {
-    "│" .. time_display .. "│" .. par_display .. "│",
-    "├──────────┼──────────┤",
-    "│" .. keys_display .. "│" .. bottom_right .. "│",
-  }
+  while #content_lines < geometry.height do
+    table.insert(content_lines, string.rep(" ", geometry.width))
+  end
 
   -- Update window highlights based on completion state
   if session.timer_state.stats_win and win_valid(session.timer_state.stats_win) then
@@ -368,34 +535,22 @@ function M.update_stats_float(session)
   pcall(vim.api.nvim_buf_set_lines, session.timer_state.stats_buf, 0, -1, false, content_lines)
 
   -- Apply score color highlighting for golf mode
-  if session.mode == "golf" and score_hl_group then
-    -- Clear existing extmarks in namespace
-    local ns_id = vim.api.nvim_create_namespace("buffergolf_score_color")
-    pcall(vim.api.nvim_buf_clear_namespace, session.timer_state.stats_buf, ns_id, 0, -1)
+  local ns_id = vim.api.nvim_create_namespace("buffergolf_score_color")
+  pcall(vim.api.nvim_buf_clear_namespace, session.timer_state.stats_buf, ns_id, 0, -1)
 
-    -- Find the position of the score in the bottom-right cell (line 3, after "│Keys: N│")
-    -- The score text is in content_lines[3], need to find where it starts
-    local line_text = content_lines[3]
-    local score_start = line_text:find("│", 12) -- Find the second │
-    if score_start then
-      -- The score starts after the second │
-      local score_text_start = score_start + 1
-      -- Find where the actual score number begins (skip leading spaces)
-      local trimmed_start = line_text:find("%S", score_text_start)
-      if trimmed_start then
-        local score_text_end = line_text:find("│", trimmed_start)
-        if score_text_end then
-          -- Apply highlight to the score text
-          pcall(vim.api.nvim_buf_add_highlight,
-            session.timer_state.stats_buf,
-            ns_id,
-            score_hl_group,
-            2,  -- Line index (0-based, so line 3 is index 2)
-            trimmed_start - 1,  -- Start column (0-based)
-            score_text_end - 1  -- End column (0-based)
-          )
-        end
-      end
+  if session.mode == "golf" and score_hl_group then
+    local offset = left_width + separator_width
+    local start_col, end_col = content_column_range(bottom_right, offset)
+    if start_col and end_col and end_col > start_col then
+      local highlight_row = geometry.has_separator_row and 2 or 1
+      pcall(vim.api.nvim_buf_add_highlight,
+        session.timer_state.stats_buf,
+        ns_id,
+        score_hl_group,
+        highlight_row,
+        start_col,
+        end_col
+      )
     end
   end
 end

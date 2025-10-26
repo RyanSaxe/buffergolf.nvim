@@ -66,12 +66,24 @@ local function clear_state(session)
     pcall(vim.api.nvim_del_augroup_by_id, session.augroup)
   end
   -- Clean up mini.diff if it was enabled
-  if session.mode == "golf" and session.minidiff_enabled and session.reference_buf then
+  if session.mode == "golf" and session.minidiff_enabled then
     local ok, minidiff = pcall(require, 'mini.diff')
-    if ok and buf_valid(session.reference_buf) then
-      pcall(minidiff.disable, session.reference_buf)
+    if ok then
+      if session.reference_buf and buf_valid(session.reference_buf) then
+        pcall(minidiff.disable, session.reference_buf)
+      end
+      if session.practice_buf and buf_valid(session.practice_buf) then
+        pcall(minidiff.disable, session.practice_buf)
+      end
     end
   end
+  if session.prev_winhighlight ~= nil then
+    if win_valid(session.practice_win) then
+      pcall(vim.api.nvim_set_option_value, "winhighlight", session.prev_winhighlight, { win = session.practice_win })
+    end
+    session.prev_winhighlight = nil
+  end
+  session.on_keystroke = nil
 end
 
 local function setup_autocmds(session)
@@ -216,6 +228,7 @@ function M.start(origin_bufnr, config, target_lines)
     prio_ghost = 200,
     ghost_marks = {},
     mode = "typing", -- Typing practice mode (empty start)
+    on_keystroke = nil,
   }
 
   sessions_by_origin[origin_bufnr] = session
@@ -305,6 +318,7 @@ function M.start_golf(origin_bufnr, start_lines, target_lines, config)
     prio_ghost = 200,
     ghost_marks = {},
     mode = "golf", -- Golf mode (non-empty start)
+    on_keystroke = nil,
   }
 
   sessions_by_origin[origin_bufnr] = session
@@ -325,6 +339,12 @@ function M.start_golf(origin_bufnr, start_lines, target_lines, config)
     on_first_edit = timer.on_first_edit,
     schedule_refresh = schedule_refresh,
   })
+
+  session.on_keystroke = function()
+    if session.mode == "golf" and session.timer_state and not session.timer_state.start_time then
+      timer.on_first_edit(session)
+    end
+  end
 
   -- Set up keystroke tracking
   keystroke.init_session(session)

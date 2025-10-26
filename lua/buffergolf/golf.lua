@@ -177,9 +177,25 @@ function M.setup_mini_diff(session)
   local practice_lines = vim.api.nvim_buf_get_lines(session.practice_buf, 0, -1, false)
   minidiff.set_ref_text(session.reference_buf, practice_lines)
 
+  vim.b[session.practice_buf].minidiff_config = {
+    source = source,
+    view = {
+      style = "sign",
+      signs = { add = "│", change = "│", delete = "│" },
+    },
+  }
+
+  minidiff.set_ref_text(session.practice_buf, session.reference_lines)
+
   vim.defer_fn(function()
     if buf_valid(session.reference_buf) then
       minidiff.toggle_overlay(session.reference_buf)
+    end
+    if buf_valid(session.practice_buf) then
+      local buf_data = minidiff.get_buf_data(session.practice_buf)
+      if buf_data and buf_data.overlay then
+        minidiff.toggle_overlay(session.practice_buf)
+      end
     end
   end, 100)
 

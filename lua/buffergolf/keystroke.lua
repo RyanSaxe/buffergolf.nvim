@@ -22,6 +22,7 @@ function M.init_session(session)
   active_sessions[practice_buf] = {
     count = 0,
     tracking_enabled = true,  -- Track only user-keystrokes, not automation
+    session = session,
   }
 
   -- Create namespace for this session's vim.on_key handler
@@ -65,6 +66,9 @@ function M.init_session(session)
       if state.tracking_enabled then
         -- This is a user-initiated keystroke
         state.count = state.count + 1
+        if state.session and state.session.on_keystroke then
+          pcall(state.session.on_keystroke, state.session)
+        end
       end
 
       -- Always increment depth to mark we're in a command (regardless of tracking)

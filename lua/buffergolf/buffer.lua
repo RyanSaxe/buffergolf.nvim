@@ -179,6 +179,15 @@ function M.disable_matchparen(session)
     return
   end
 
+  if session.prev_winhighlight == nil then
+    local ok_prev, prev = pcall(vim.api.nvim_get_option_value, "winhighlight", { win = win })
+    if ok_prev then
+      session.prev_winhighlight = prev
+    else
+      session.prev_winhighlight = ""
+    end
+  end
+
   local ok, current = pcall(vim.api.nvim_get_option_value, "winhighlight", { win = win })
   local value = ok and current or ""
   if value ~= "" then
