@@ -62,9 +62,6 @@ local function compute_stats_geometry(session)
   end
 
   local separator_width = 1
-  if width < separator_width + 2 then
-    separator_width = math.max(1, width - 2)
-  end
 
   local available = width - separator_width
   if available < 2 then
@@ -139,34 +136,6 @@ local function pad_right(str, width)
     return fitted
   end
   return str .. string.rep(" ", width - display_width)
-end
-
-local function content_column_range(text, offset)
-  local length = vim.fn.strchars(text)
-  local col = 0
-  local start_col = nil
-  local end_col = nil
-
-  for i = 0, length - 1 do
-    local ch = vim.fn.strcharpart(text, i, 1)
-    if ch == "" then
-      break
-    end
-    local width = vim.fn.strdisplaywidth(ch)
-    if not start_col and ch:match("%S") then
-      start_col = col
-    end
-    if ch:match("%S") then
-      end_col = col + width
-    end
-    col = col + width
-  end
-
-  if not start_col or not end_col then
-    return nil, nil
-  end
-
-  return offset + start_col, offset + end_col
 end
 
 local function format_time(seconds)
@@ -418,10 +387,6 @@ function M.update_stats_float(session)
 
   local left_width = geometry.left_width
   local right_width = geometry.right_width
-  local separator_width = geometry.separator_width
-  local separator_left_pad = math.max(0, math.floor((separator_width - 1) / 2))
-  local separator_right_pad = math.max(0, separator_width - 1 - separator_left_pad)
-  local vertical_separator = string.rep(" ", separator_left_pad) .. "|" .. string.rep(" ", separator_right_pad)
 
   local stats_buf = session.timer_state.stats_buf
   if not buf_valid(stats_buf) then
@@ -458,8 +423,8 @@ function M.update_stats_float(session)
     time_display = string.format("⏱ %s%s", time_str, session.timer_state.countdown_mode and " ↓" or "")
   end
 
-  -- Calculate the bottom-right metric based on mode
-  local bottom_right
+  -- Calculate the top-left metric based on mode
+  local score_display
   local score_hl_group = nil
   if session.mode == "golf" then
     -- Golf mode: Show score percentage
@@ -482,41 +447,41 @@ function M.update_stats_float(session)
       end
 
       if score_pct > 0 then
-        bottom_right = string.format("+%.1f%%", score_pct)
+        score_display = string.format("+%.1f%%", score_pct)
       elseif score_pct < 0 then
-        bottom_right = string.format("%.1f%%", score_pct)
+        score_display = string.format("%.1f%%", score_pct)
       else
-        bottom_right = "0.0%"
+        score_display = "0.0%"
       end
     else
-      bottom_right = "N/A"
+      score_display = "N/A"
     end
   else
     -- Typing mode: Show WPM
-    bottom_right = string.format("WPM: %d", wpm)
+    score_display = string.format("WPM: %d", wpm)
   end
 
-  -- Format the values for display
+  -- Format the values for display in their respective quadrants
   local par_display = string.format("Par: %d", par)
   local keys_display = string.format("Keys: %d", keystrokes)
 
   -- Pad strings to ensure consistent grid alignment
   time_display = pad_center(time_display, left_width)
   par_display = pad_center(par_display, right_width)
-  keys_display = pad_center(keys_display, left_width)
-  bottom_right = pad_center(bottom_right, right_width)
+  keys_display = pad_center(keys_display, right_width)
+  score_display = pad_center(score_display, left_width)
 
-  local line_top = pad_right(time_display .. vertical_separator .. par_display, geometry.width)
+  local line_top = pad_right(score_display .. "│" .. keys_display, geometry.width)
   local content_lines = { line_top }
 
   if geometry.has_separator_row then
-    local horizontal_left = string.rep("-", left_width + separator_left_pad)
-    local horizontal_right = string.rep("-", right_width + separator_right_pad)
-    local horizontal_line = pad_right(horizontal_left .. "+" .. horizontal_right, geometry.width)
+    local horizontal_left = string.rep("─", left_width)
+    local horizontal_right = string.rep("─", right_width)
+    local horizontal_line = pad_right(horizontal_left .. "┼" .. horizontal_right, geometry.width)
     table.insert(content_lines, horizontal_line)
   end
 
-  local line_bottom = pad_right(keys_display .. vertical_separator .. bottom_right, geometry.width)
+  local line_bottom = pad_right(time_display .. "│" .. par_display, geometry.width)
   table.insert(content_lines, line_bottom)
 
   while #content_lines < geometry.height do
@@ -538,20 +503,17 @@ function M.update_stats_float(session)
   local ns_id = vim.api.nvim_create_namespace("buffergolf_score_color")
   pcall(vim.api.nvim_buf_clear_namespace, session.timer_state.stats_buf, ns_id, 0, -1)
 
-  if session.mode == "golf" and score_hl_group then
-    local offset = left_width + separator_width
-    local start_col, end_col = content_column_range(bottom_right, offset)
-    if start_col and end_col and end_col > start_col then
-      local highlight_row = geometry.has_separator_row and 2 or 1
-      pcall(vim.api.nvim_buf_add_highlight,
-        session.timer_state.stats_buf,
-        ns_id,
-        score_hl_group,
-        highlight_row,
-        start_col,
-        end_col
-      )
-    end
+  if session.mode == "golf" and score_hl_group and left_width > 0 then
+    local highlight_row = 0
+    local end_col = left_width
+    pcall(vim.api.nvim_buf_add_highlight,
+      session.timer_state.stats_buf,
+      ns_id,
+      score_hl_group,
+      highlight_row,
+      0,
+      end_col
+    )
   end
 end
 
