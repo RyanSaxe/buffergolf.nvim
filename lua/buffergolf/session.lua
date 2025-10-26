@@ -255,6 +255,17 @@ function M.start(origin_bufnr, config, target_lines)
 
   timer.init(session)
   visual.refresh(session)
+
+  -- Calculate par for typing mode
+  vim.defer_fn(function()
+    if not session or not buf_valid(session.practice_buf) then
+      return
+    end
+    local stats = require("buffergolf.stats")
+    session.par = stats.calculate_par(session)
+    -- Trigger a visual refresh to update the display with the calculated par
+    visual.refresh(session)
+  end, 50)
 end
 
 function M.start_golf(origin_bufnr, start_lines, target_lines, config)

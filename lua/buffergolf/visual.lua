@@ -77,23 +77,36 @@ local function expand_ghost_text(session, actual_text, ghost_text)
 end
 
 function M.set_ghost_mark(session, row, col, text, actual)
-  M.clear_ghost_mark(session, row)
+  local existing_id = session.ghost_marks[row]
 
+  -- If text is empty, clear the mark if it exists
   if text == "" then
+    if existing_id then
+      M.clear_ghost_mark(session, row)
+    end
     return
   end
 
+  -- Prepare the virtual text
   local virt_text = text
   if virt_text:find("\t") then
     virt_text = expand_ghost_text(session, actual or "", virt_text)
   end
 
-  local id = vim.api.nvim_buf_set_extmark(session.practice_buf, session.ns_ghost, row - 1, col, {
+  -- Create or update the extmark
+  local opts = {
     virt_text = { { virt_text, session.config.ghost_hl } },
     virt_text_pos = "inline",
     hl_mode = "combine",
     priority = session.prio_ghost,
-  })
+  }
+
+  -- If mark exists, update it in place (avoids flicker)
+  if existing_id then
+    opts.id = existing_id
+  end
+
+  local id = vim.api.nvim_buf_set_extmark(session.practice_buf, session.ns_ghost, row - 1, col, opts)
   session.ghost_marks[row] = id
 end
 
@@ -120,11 +133,17 @@ function M.refresh(session)
       ensure_line_count(session)
 
       local bufnr = session.practice_buf
-      local actual_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, true)
-      local total = math.max(#actual_lines, #session.reference_lines)
+      local actual_line_count = vim.api.nvim_buf_line_count(bufnr)
+      local total = math.max(actual_line_count, #session.reference_lines)
+
+      -- Initialize mismatch tracking if needed
+      if not session.mismatch_ranges then
+        session.mismatch_ranges = {}
+      end
 
       for row = 1, total do
-        local actual = actual_lines[row] or ""
+        local actual_line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, true)
+        local actual = actual_line[1] or ""
 
         local reference = session.reference_lines[row] or ""
         local prefix = 0
@@ -141,18 +160,27 @@ function M.refresh(session)
         local mismatch_start = prefix
         local mismatch_finish = #actual
 
-        vim.api.nvim_buf_clear_namespace(bufnr, session.ns_mismatch, row - 1, row)
-        M.clear_ghost_mark(session, row)
+        -- Only update mismatch highlighting if it changed
+        local prev_range = session.mismatch_ranges[row]
+        local range_changed = not prev_range
+          or prev_range.start ~= mismatch_start
+          or prev_range.finish ~= mismatch_finish
 
-        if mismatch_finish > mismatch_start then
-          vim.api.nvim_buf_add_highlight(
-            bufnr,
-            session.ns_mismatch,
-            session.config.mismatch_hl,
-            row - 1,
-            mismatch_start,
-            mismatch_finish
-          )
+        if range_changed then
+          vim.api.nvim_buf_clear_namespace(bufnr, session.ns_mismatch, row - 1, row)
+
+          if mismatch_finish > mismatch_start then
+            vim.api.nvim_buf_add_highlight(
+              bufnr,
+              session.ns_mismatch,
+              session.config.mismatch_hl,
+              row - 1,
+              mismatch_start,
+              mismatch_finish
+            )
+          end
+
+          session.mismatch_ranges[row] = { start = mismatch_start, finish = mismatch_finish }
         end
 
         local ghost_start_index = prefix + 1
@@ -165,9 +193,18 @@ function M.refresh(session)
         M.set_ghost_mark(session, row, ghost_col, ghost, actual)
       end
 
-      if #session.ghost_marks > total then
-        for row = total + 1, #session.ghost_marks do
+      -- Clean up ghost marks and mismatch ranges for rows beyond the current line count
+      for row, _ in pairs(session.ghost_marks) do
+        if row > total then
           M.clear_ghost_mark(session, row)
+        end
+      end
+
+      if session.mismatch_ranges then
+        for row, _ in pairs(session.mismatch_ranges) do
+          if row > total then
+            session.mismatch_ranges[row] = nil
+          end
         end
       end
     until true

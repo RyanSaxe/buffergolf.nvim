@@ -33,6 +33,7 @@ local default_config = {
 		good = "#5555ff",          -- 25% to 50%: blue
 		great = "#00ff00",         -- 50% to 75%: green
 	},
+	auto_dedent = true,            -- Strip common leading whitespace
 }
 
 local configured = false
@@ -84,9 +85,8 @@ function M.setup(opts)
 	})
 
 	vim.api.nvim_create_user_command("Buffergolf", function(opts)
-		-- Handle range if provided (visual selection)
 		if opts.range > 0 then
-			M.toggle_with_picker()
+			M.toggle_with_picker(opts.line1, opts.line2)
 		else
 			M.toggle_with_picker()
 		end
@@ -96,8 +96,12 @@ function M.setup(opts)
 		M.stop()
 	end, { desc = "Stop buffergolf practice buffer" })
 
-	vim.api.nvim_create_user_command("BuffergolfCountdown", function()
-		M.start_countdown()
+	vim.api.nvim_create_user_command("BuffergolfCountdown", function(opts)
+		if opts.range > 0 then
+			M.start_countdown(opts.line1, opts.line2)
+		else
+			M.start_countdown()
+		end
 	end, { desc = "Start countdown timer for buffergolf practice buffer", range = true })
 
 	vim.api.nvim_create_user_command("BuffergolfTyping", function()
@@ -109,7 +113,12 @@ function M.setup(opts)
 			desc = "Toggle buffergolf practice buffer",
 			silent = true,
 		})
-		vim.keymap.set("x", toggle_key, ":<C-u>'<,'>Buffergolf<CR>", {
+		vim.keymap.set("x", toggle_key, function()
+			vim.cmd('normal! \027')
+			local start_line = vim.fn.line("'<")
+			local end_line = vim.fn.line("'>")
+			M.toggle_with_picker(start_line, end_line)
+		end, {
 			desc = "Toggle buffergolf with visual selection",
 			silent = true,
 		})
@@ -121,7 +130,12 @@ function M.setup(opts)
 			desc = "Start countdown timer",
 			silent = true,
 		})
-		vim.keymap.set("x", countdown_key, ":<C-u>'<,'>BuffergolfCountdown<CR>", {
+		vim.keymap.set("x", countdown_key, function()
+			vim.cmd('normal! \027')
+			local start_line = vim.fn.line("'<")
+			local end_line = vim.fn.line("'>")
+			M.start_countdown(start_line, end_line)
+		end, {
 			desc = "Start countdown timer with visual selection",
 			silent = true,
 		})
@@ -142,12 +156,12 @@ function M.toggle()
 end
 
 -- New toggle function that shows the picker
-function M.toggle_with_picker()
+function M.toggle_with_picker(start_line, end_line)
 	local bufnr = vim.api.nvim_get_current_buf()
 	if Session.is_active(bufnr) then
 		Session.stop(bufnr)
 	else
-		Picker.show_picker(bufnr, M.config)
+		Picker.show_picker(bufnr, start_line, end_line, M.config)
 	end
 end
 
@@ -178,7 +192,7 @@ function M.start_typing()
 	Session.start(bufnr, M.config)
 end
 
-function M.start_countdown()
+function M.start_countdown(start_line, end_line)
 	local bufnr = vim.api.nvim_get_current_buf()
 
 	vim.ui.input({ prompt = "Countdown duration (seconds): " }, function(input)
@@ -212,7 +226,7 @@ function M.start_countdown()
 				local config_with_countup = vim.tbl_extend("force", M.config, {
 					countdown_mode = false
 				})
-				Picker.show_picker(bufnr, config_with_countup)
+				Picker.show_picker(bufnr, start_line, end_line, config_with_countup)
 			else
 				-- Countdown mode for new session
 				local seconds = tonumber(input)
@@ -225,7 +239,7 @@ function M.start_countdown()
 					countdown_seconds = seconds,
 					countdown_mode = true
 				})
-				Picker.show_picker(bufnr, config_with_countdown)
+				Picker.show_picker(bufnr, start_line, end_line, config_with_countdown)
 			end
 		end
 	end)

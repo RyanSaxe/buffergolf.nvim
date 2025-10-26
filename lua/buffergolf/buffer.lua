@@ -206,4 +206,39 @@ function M.disable_matchparen(session)
   end
 end
 
+function M.dedent_lines(lines)
+  if #lines == 0 then
+    return lines
+  end
+
+  local min_indent = math.huge
+  for _, line in ipairs(lines) do
+    if line:match("%S") then
+      local indent = line:match("^%s*"):len()
+      min_indent = math.min(min_indent, indent)
+    end
+  end
+
+  if min_indent == 0 or min_indent == math.huge then
+    return lines
+  end
+
+  local result = {}
+  for _, line in ipairs(lines) do
+    if line:match("%S") then
+      table.insert(result, line:sub(min_indent + 1))
+    else
+      table.insert(result, line)
+    end
+  end
+  return result
+end
+
+function M.prepare_lines(lines, bufnr, config)
+  if config.auto_dedent then
+    lines = M.dedent_lines(lines)
+  end
+  return lines
+end
+
 return M

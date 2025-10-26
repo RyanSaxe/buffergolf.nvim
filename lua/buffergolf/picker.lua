@@ -1,4 +1,5 @@
 local M = {}
+local buffer = require("buffergolf.buffer")
 
 -- Check if Snacks.nvim is available
 local function has_snacks()
@@ -35,6 +36,10 @@ end
 -- Start golf mode with given starting content
 local function start_golf_mode(origin_buf, start_lines, target_lines, config)
   local Session = require("buffergolf.session")
+
+  -- Apply formatting/dedenting to start lines (target already formatted in show_picker)
+  start_lines = buffer.prepare_lines(start_lines, origin_buf, config)
+
   Session.start_golf(origin_buf, start_lines, target_lines, config)
 
   -- Apply countdown if configured
@@ -349,27 +354,27 @@ local function show_start_state_picker(origin_buf, target_lines, is_selection, c
 end
 
 -- Entry point with visual selection support
-function M.show_picker(bufnr, config)
-  local mode = vim.api.nvim_get_mode().mode
-
+function M.show_picker(bufnr, start_line, end_line, config)
   local target_lines
   local is_visual_selection = false
 
-  -- Check if we're in visual mode or if marks are set from a visual command
-  if mode:match("^[vV\22]") or (vim.fn.exists("'<") == 1 and vim.fn.line("'<") > 0) then
-    -- Try to get visual selection marks
-    local start_line = vim.fn.line("'<")
-    local end_line = vim.fn.line("'>")
-
-    -- If we have valid visual marks, use them
-    if start_line > 0 and end_line > 0 then
-      -- Exit visual mode first if we're in it
-      if mode:match("^[vV\22]") then
-        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<Esc>', true, false, true), 'n', false)  -- Exit visual mode with Escape
+  -- Prioritize explicit range parameters
+  if start_line and end_line and start_line > 0 and end_line > 0 then
+    target_lines = vim.api.nvim_buf_get_lines(bufnr, start_line - 1, end_line, false)
+    is_visual_selection = true
+  else
+    -- Fall back to mark detection
+    local mode = vim.api.nvim_get_mode().mode
+    if mode:match("^[vV\026]") or (vim.fn.line("'<") > 0 and vim.fn.line("'>") > 0) then
+      local mark_start = vim.fn.line("'<")
+      local mark_end = vim.fn.line("'>")
+      if mark_start > 0 and mark_end > 0 then
+        if mode:match("^[vV\026]") then
+          vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<Esc>', true, false, true), 'n', false)
+        end
+        target_lines = vim.api.nvim_buf_get_lines(bufnr, mark_start - 1, mark_end, false)
+        is_visual_selection = true
       end
-
-      target_lines = vim.api.nvim_buf_get_lines(bufnr, start_line - 1, end_line, false)
-      is_visual_selection = true
     end
   end
 
@@ -378,7 +383,9 @@ function M.show_picker(bufnr, config)
     target_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   end
 
-  -- Show the picker
+  -- Apply formatting/dedenting to target lines
+  target_lines = buffer.prepare_lines(target_lines, bufnr, config)
+
   show_start_state_picker(bufnr, target_lines, is_visual_selection, config)
 end
 
