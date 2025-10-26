@@ -357,7 +357,7 @@ function M.show_picker(bufnr, config)
     if start_line > 0 and end_line > 0 then
       -- Exit visual mode first if we're in it
       if mode:match("^[vV\22]") then
-        vim.cmd("normal! ")  -- Exit visual mode with Escape
+        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<Esc>', true, false, true), 'n', false)  -- Exit visual mode with Escape
       end
 
       target_lines = vim.api.nvim_buf_get_lines(bufnr, start_line - 1, end_line, false)
