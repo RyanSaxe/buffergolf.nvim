@@ -98,7 +98,7 @@ function M.setup(opts)
 
 	vim.api.nvim_create_user_command("BuffergolfCountdown", function()
 		M.start_countdown()
-	end, { desc = "Start countdown timer for buffergolf practice buffer" })
+	end, { desc = "Start countdown timer for buffergolf practice buffer", range = true })
 
 	vim.api.nvim_create_user_command("BuffergolfTyping", function()
 		M.start_typing()
@@ -109,12 +109,20 @@ function M.setup(opts)
 			desc = "Toggle buffergolf practice buffer",
 			silent = true,
 		})
+		vim.keymap.set("x", toggle_key, ":<C-u>'<,'>Buffergolf<CR>", {
+			desc = "Toggle buffergolf with visual selection",
+			silent = true,
+		})
 	end
 
 	local countdown_key = keymaps.countdown
 	if countdown_key and countdown_key ~= "" then
 		vim.keymap.set("n", countdown_key, M.start_countdown, {
 			desc = "Start countdown timer",
+			silent = true,
+		})
+		vim.keymap.set("x", countdown_key, ":<C-u>'<,'>BuffergolfCountdown<CR>", {
+			desc = "Start countdown timer with visual selection",
 			silent = true,
 		})
 	end
