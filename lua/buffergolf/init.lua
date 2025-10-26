@@ -18,20 +18,10 @@ local default_config = {
 		position = "right",  -- "right", "left", "top", "bottom"
 		size = 50,          -- percentage of screen for vertical splits, or lines for horizontal
 	},
-	stats_float = {
-		position = "bottom-right",  -- "bottom-right", "bottom-left", "top-right", "top-left"
-		offset_x = 2,               -- horizontal padding from window edge
-		offset_y = 1,               -- vertical padding from window edge
-	},
-	score_colors = {
-		-- Colors for score percentage display (golf mode only)
-		-- Score = (par - keystrokes) / par * 100
-		very_bad = "#ff0000",      -- < -50%: bright red
-		bad = "#ff5555",           -- -50% to -25%: red
-		poor = "#ffaa00",          -- -25% to 0%: orange
-		okay = "#88ccff",          -- 0% to 25%: light blue
-		good = "#5555ff",          -- 25% to 50%: blue
-		great = "#00ff00",         -- 50% to 75%: green
+	stats = {
+		position = "top",           -- position of stats bar (currently only "top" supported)
+		height = 3,                 -- height of stats bar in lines (matches virtual padding)
+		show_diff_summary = true,   -- show mini.diff summary in golf mode
 	},
 	auto_dedent = true,            -- Strip common leading whitespace
 }
@@ -243,6 +233,77 @@ function M.start_countdown(start_line, end_line)
 			end
 		end
 	end)
+end
+
+-- Public API for user statusline customization
+-- Returns stats for the given buffer if it's an active buffergolf session
+-- Returns nil if buffer is not a buffergolf session
+function M.get_session_stats(bufnr)
+	bufnr = bufnr or vim.api.nvim_get_current_buf()
+
+	if not Session.is_active(bufnr) then
+		return nil
+	end
+
+	-- Get the session
+	local session = Session.get(bufnr)
+	if not session or not session.timer_state then
+		return nil
+	end
+
+	-- Build stats table
+	local stats_module = require("buffergolf.stats")
+	local timer_module = require("buffergolf.timer")
+
+	local time_str
+	if session.timer_state.locked or session.timer_state.completed then
+		time_str = session.timer_state.frozen_time
+	else
+		-- Calculate current time
+		local format_time = function(seconds)
+			local minutes = math.floor(seconds / 60)
+			local secs = seconds % 60
+			return string.format("%02d:%02d", minutes, secs)
+		end
+
+		if session.timer_state.start_time then
+			local elapsed_ns = vim.loop.hrtime() - session.timer_state.start_time
+			local elapsed = math.floor(elapsed_ns / 1e9)
+			time_str = format_time(elapsed)
+		else
+			time_str = "00:00"
+		end
+	end
+
+	local wpm = stats_module.calculate_wpm(session)
+	local keystrokes = stats_module.get_keystroke_count(session)
+	local par = session.par or 0
+
+	-- Calculate score if golf mode
+	local score_pct = nil
+	if session.mode == "golf" and par > 0 then
+		score_pct = (1 - keystrokes / par) * 100
+	end
+
+	-- Get diff summary if golf mode
+	local diff = nil
+	if session.mode == "golf" and session.reference_buf then
+		local ok, summary = pcall(vim.api.nvim_buf_get_var, session.reference_buf, "minidiff_summary")
+		if ok and summary then
+			diff = summary
+		end
+	end
+
+	return {
+		time = time_str,
+		wpm = wpm,
+		keystrokes = keystrokes,
+		par = par,
+		score_pct = score_pct,
+		mode = session.mode,
+		completed = session.timer_state.completed or false,
+		diff = diff,
+	}
 end
 
 return M

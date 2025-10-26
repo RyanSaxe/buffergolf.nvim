@@ -63,6 +63,9 @@ function M.create_reference_window(session)
 
   vim.api.nvim_set_current_win(session.practice_win)
 
+  -- Ensure cursor starts at the beginning of practice buffer
+  vim.api.nvim_win_set_cursor(session.practice_win, {1, 0})
+
   session.reference_buf = ref_buf
   session.reference_win = ref_win
 

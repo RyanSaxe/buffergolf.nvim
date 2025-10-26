@@ -98,36 +98,6 @@ local function setup_autocmds(session)
     end,
   })
 
-  -- Show float when entering the practice buffer
-  vim.api.nvim_create_autocmd("BufEnter", {
-    group = aug,
-    buffer = session.practice_buf,
-    callback = function()
-      timer.show_stats_float(session)
-    end,
-  })
-
-  -- Hide float when leaving the practice buffer
-  vim.api.nvim_create_autocmd("BufLeave", {
-    group = aug,
-    buffer = session.practice_buf,
-    callback = function()
-      timer.hide_stats_float(session)
-    end,
-  })
-
-  -- Also handle window events for proper cleanup
-  vim.api.nvim_create_autocmd("WinLeave", {
-    group = aug,
-    callback = function()
-      -- Only hide if we're actually leaving the practice buffer
-      local current_buf = vim.api.nvim_win_get_buf(0)
-      if current_buf == session.practice_buf then
-        timer.hide_stats_float(session)
-      end
-    end,
-  })
-
   vim.api.nvim_create_autocmd("BufWriteCmd", {
     group = aug,
     buffer = session.practice_buf,
@@ -216,6 +186,9 @@ function M.start(origin_bufnr, config, target_lines)
   pcall(vim.api.nvim_buf_set_var, practice_buf, "autopairs_enabled", false)
   pcall(vim.api.nvim_buf_set_var, practice_buf, "minipairs_disable", true)
 
+  -- Add buffer marker for user statusline customization
+  pcall(vim.api.nvim_buf_set_var, practice_buf, "buffergolf_active", true)
+
   local session = {
     origin_buf = origin_bufnr,
     origin_win = current_win,
@@ -254,6 +227,13 @@ function M.start(origin_bufnr, config, target_lines)
   keystroke.init_session(session)
 
   timer.init(session)
+
+  -- Ensure cursor starts at the beginning of practice buffer
+  if win_valid(session.practice_win) then
+    vim.api.nvim_set_current_win(session.practice_win)
+    vim.api.nvim_win_set_cursor(session.practice_win, {1, 0})
+  end
+
   visual.refresh(session)
 
   -- Calculate par for typing mode
@@ -316,6 +296,9 @@ function M.start_golf(origin_bufnr, start_lines, target_lines, config)
   pcall(vim.api.nvim_buf_set_var, practice_buf, "autopairs_enabled", false)
   pcall(vim.api.nvim_buf_set_var, practice_buf, "minipairs_disable", true)
 
+  -- Add buffer marker for user statusline customization
+  pcall(vim.api.nvim_buf_set_var, practice_buf, "buffergolf_active", true)
+
   local session = {
     origin_buf = origin_bufnr,
     origin_win = current_win,
@@ -360,12 +343,14 @@ function M.start_golf(origin_bufnr, start_lines, target_lines, config)
   -- Set up keystroke tracking
   keystroke.init_session(session)
 
-  -- Create reference window and set up mini.diff for visualization
+  -- Create timer/stats window first (horizontal split spanning full width)
+  timer.init(session)
+
+  -- Then create reference window (vertical split in the bottom area)
   golf.create_reference_window(session)
   golf.setup_mini_diff(session)
   golf.setup_navigation(session)  -- Add navigation commands and keymaps
 
-  timer.init(session)
   visual.refresh(session)
 
   -- Calculate par once after mini.diff has had time to process hunks
@@ -491,6 +476,11 @@ function M.start_countdown(bufnr, seconds)
 
   timer.start_countdown(session, seconds)
   return true
+end
+
+-- Public API to get session for a buffer
+function M.get(bufnr)
+  return get_session(bufnr)
 end
 
 return M

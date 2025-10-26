@@ -11,6 +11,7 @@ INSERT DEMO VIDEO HERE.
 - **Ghost Text Practice**: Reference text appears inline beyond what you've typed
 - **Real-time Feedback**: Mismatched characters highlighted in red with underline
 - **Live Statistics**: Floating window shows elapsed time, WPM, keystroke count, and par as you type
+- **Visual Selection Support**: Practice on specific lines by making a visual selection
 - **Countdown Mode**: Practice with time pressure
 - **LSP-Friendly**: Practice buffer maintains normal functionality - completion, semantic features, and keymaps all work
 - **Distraction-Free**: Diagnostics, inlay hints, and conflicting plugins automatically disabled
@@ -92,6 +93,9 @@ return {
       disable_inlay_hints = true,
       disable_matchparen = true,
 
+      -- Automatically remove common leading whitespace
+      auto_dedent = true,
+
       -- Keymaps (set to false to disable default keymaps)
       keymaps = {
         toggle = "<leader>bg",     -- Toggle practice session
@@ -165,6 +169,25 @@ return {
 5. Mismatches highlighted in real-time
 6. Stats window shows time, WPM, keystroke count, and par
 
+### Visual Selection Mode
+
+Practice on specific lines instead of the entire buffer:
+
+**Method 1: Visual Mode + Keymap**
+
+1. Select lines in visual mode (`V` for line-wise)
+2. Press `<leader>bg` to start practice session
+3. Or press `<leader>bG` for countdown mode
+
+**Method 2: Command with Range**
+
+```vim
+:5,20Buffergolf           " Practice lines 5-20
+:5,20BuffergolfCountdown  " Countdown mode on lines 5-20
+```
+
+The selected lines become your practice target while the rest of the buffer is ignored.
+
 ### Countdown Mode
 
 Challenge yourself with a time limit:
@@ -230,6 +253,9 @@ return {
     -- Disable matchparen highlighting (keeps ghost text clean)
     disable_matchparen = true,
 
+    -- Automatically remove common leading whitespace from practice text
+    auto_dedent = true,
+
     -- Keymaps
     keymaps = {
       toggle = "<leader>bg",     -- Toggle practice session
@@ -248,6 +274,23 @@ To customize the appearance:
 vim.api.nvim_set_hl(0, "BuffergolfGhost", { fg = "#5c6370", italic = true })
 vim.api.nvim_set_hl(0, "BuffergolfMismatch", { fg = "#e06c75", underline = true, bg = "#3e2929" })
 ```
+
+### Lualine Configuration
+
+If you use lualine.nvim for your statusline, you'll need to add `BuffergolfStats` to your disabled filetypes to prevent lualine from showing on the stats window:
+
+```lua
+require('lualine').setup {
+  options = {
+    disabled_filetypes = {
+      statusline = { "BuffergolfStats", ... },  -- Add to your existing list
+      winbar = { "BuffergolfStats", ... },      -- Add to your existing list
+    },
+  },
+}
+```
+
+This ensures the stats window displays cleanly without any statusline or winbar interference.
 
 ### Disable Default Keymaps
 
@@ -273,9 +316,9 @@ return {
 
 | Command | Description |
 |---------|-------------|
-| `:Buffergolf` | Toggle practice session for current buffer |
+| `:Buffergolf` | Toggle practice session for current buffer (supports range, e.g., `:5,20Buffergolf`) |
 | `:BuffergolfStop` | Stop active practice session |
-| `:BuffergolfCountdown` | Start countdown timer practice |
+| `:BuffergolfCountdown` | Start countdown timer practice (supports range, e.g., `:5,20BuffergolfCountdown`) |
 | `:BuffergolfTyping` | Start typing practice (empty starting buffer) |
 
 ### Golf Mode Commands

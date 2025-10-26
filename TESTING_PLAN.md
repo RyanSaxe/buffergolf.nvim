@@ -33,7 +33,7 @@ tests/
 
 - `lua/buffergolf/buffer.lua`
   - `generate_buffer_name` (named & unnamed buffers, existing file warning).
-  - `normalize_lines` and `strip_trailing_empty_lines` (tab expansion, edge cases).
+  - `dedent_lines` and `prepare_lines` (auto-dedent logic, tab expansion, edge cases).
 - `lua/buffergolf/stats.lua`
   - `calculate_edit_distance`, `calculate_par` (difficulty multipliers, fallback without `mini.diff`).
   - `count_correct_characters` (mismatch halting, whitespace trimming).

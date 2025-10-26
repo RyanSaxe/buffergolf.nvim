@@ -10,7 +10,7 @@
 - [ ] Document the stats file location and command in `README.md` so early users know how to inspect their history.
 
 ### 2. Git Picker Guard
-- [ ] Replace `is_git_repo()` in `lua/buffergolf/picker.lua` with an implementation that checks `vim.fn.system({"git","rev-parse","--is-inside-work-tree"})` and inspects `vim.v.shell_error`, or alternatively walks up for a `.git` directory using `vim.fs.find`.
+- [ ] Replace `is_git_repo()` in `lua/buffergolf/picker.lua` with an implementation that checks `vim.fn.system({"git","rev-parse","--is-inside-work-tree"})` and inspects `vim.v.shell_error`, or alternatively walks up for a `.git` directory using `vim.fs.find`. Current implementation uses hacky spawn+kill approach.
 - [ ] Update the function to cache its result per buffer invocation (optional but prevents repeated system calls when the picker runs multiple times).
-- [ ] Add a protective branch so the Git option is only inserted when `is_git_repo()` returns true **and** the current buffer has an on-disk path.
+- [x] Add a protective branch so the Git option is only inserted when `is_git_repo()` returns true **and** the current buffer has an on-disk path.
 - [ ] Note the behavioural change in the changelog section of `README.md` (or add a short "Unreleased" note if no changelog exists).
