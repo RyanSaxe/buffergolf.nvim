@@ -53,8 +53,8 @@ local function expand_ghost_text(session, actual_text, ghost_text)
   end
 
   local pieces = {}
-  local chars = vim.fn.split(ghost_text, "\\zs")
-  for _, ch in ipairs(chars) do
+  local chars = {}
+  for ch in ghost_text:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
     if ch == "\t" then
       local spaces = tabstop - (display_col % tabstop)
       if spaces <= 0 then
