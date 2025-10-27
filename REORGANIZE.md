@@ -1,46 +1,102 @@
 # REORGANIZE PLAN
 
-NOTE: after the completion of each phase, pause and ask the user to verify correctness before proceeding. This means that each phase should be not just easy to review, but fully functional and testable on its own.
+NOTE: After the completion of each phase, pause and ask the user to verify correctness before proceeding. This means that each phase should be not just easy to review, but fully functional and testable on its own.
 
-## Phase 1 – Scope & Interfaces
+## Current State Analysis
+- **No floating windows** - Stats display uses split windows (top/bottom)
+- **9 modules total**: init, session, timer, stats, golf, picker, buffer, keystroke, visual
+- **3,127 total lines** across all modules
+- **No subdirectories** yet created
 
-- Inventory every public function in `session`, `timer`, `stats`, `golf`, and `picker`; note which modules consume each API.
-- Capture the mapping in a short doc to prevent accidental API regressions during refactors.
-- Add lightweight assertions or sanity checks at key call sites where modules will be split to help catch wiring issues early.
+## Optimization Goals
+Each phase aims for ~30-40% line reduction through:
+- Condensing early returns and simple functions
+- Using tables/loops for repetitive patterns
+- Removing unnecessary comments and whitespace
+- Eliminating intermediate variables
+- Simplifying conditional logic
+- **NO functionality changes** - only cleaner, more concise code
 
-## Phase 2 – Session Split
+## Phase 1 – Timer Module Split ✅ COMPLETED
 
-- Create `lua/buffergolf/session/` with:
-  - `buffer.lua`: buffer creation, option propagation, default settings.
-  - `events.lua`: autocmds, user commands, and refresh scheduling.
-  - `modes.lua`: typing vs golf initialization, reset handling, and shared utilities.
-- Keep `session.lua` as the orchestrator that constructs the session table, delegates to helpers, and exposes the public API.
-- Goal: shrink `session.lua` to ≲250 lines without behavioral changes.
+**Largest module, clearest separation**
+- **Original**: 584 lines
+- **Result**: 343 lines (41% reduction achieved!)
+- Split into `timer/timer.lua` and `timer/stats_display.lua`
 
-## Phase 3 – Timer & UI Separation
+## Phase 2 – Session Module Split
 
-- Extract float geometry, padding helpers, highlight configuration, and rendering into `timer/ui.lua`.
-- Leave `timer.lua` with lifecycle management: start/stop, countdown mode, completion checks, and stats queries.
-- Surface a slim UI API (e.g. `ui.ensure(session)`, `ui.render(session, data)`) so presentation logic is isolated from timing state.
-- Goal: reduce `timer.lua` to ≲300 lines and make the UI module independently tweakable.
+**Complex state management, needs careful separation**
 
-## Phase 4 – Stats Layering
+Create `lua/buffergolf/session/`:
+- **`lifecycle.lua`**: start(), stop(), reset_to_start(), state transitions
+- **`autocmds.lua`**: Event handlers and user command registration
+- **`storage.lua`**: Session lookup and management
+- **`session.lua`**: Main orchestrator and public API
+- **Goal**: Aggressive line reduction through optimization
 
-- Introduce `stats/par.lua` for par estimation (typing mode, golf/diff-based calculations) and related edit-distance helpers.
-- Keep runtime metrics (WPM, keystrokes, score struct assembly) in `stats/core.lua`, delegating to `par.lua` when needed.
-- Update callers to require only the portion they rely on, preserving the existing outward-facing API via a façade if necessary.
-- Goal: each stats file under ≲200 lines with clearly separated responsibilities.
+## Phase 3 – Picker Sources
 
-## Phase 5 – Golf Utilities
+**Well-defined source boundaries**
 
-- Split `golf.lua` into:
-  - `golf/layout.lua`: reference window creation, sizing logic, mini.diff setup.
-  - `golf/navigation.lua`: synchronized hunk navigation, keymaps, and commands.
-- Keep a thin `golf.lua` façade that wires both modules and preserves the current API.
-- Goal: simplify reasoning about mini.diff upkeep versus navigation controls, easing future UI tweaks.
+Create `lua/buffergolf/picker/`:
+- **`sources/file.lua`**: File selection via fd
+- **`sources/buffer.lua`**: Listed buffers selection
+- **`sources/register.lua`**: Register content selection
+- **`sources/git.lua`**: Git commit selection
+- **`adapter.lua`**: Snacks.nvim vs native handling
+- **`picker.lua`**: Main entry point, routing
+- **Goal**: Maximize code reuse, eliminate duplication
 
-## Phase 6 – Picker Simplification
+## Phase 4 – Stats Organization
 
-- Design a lightweight picker source interface (e.g. `pickers/sources/file.lua`, `buffer.lua`, `register.lua`, `git.lua`) that each implements `gather()`/`confirm()` logic.
-- Centralize shared countdown/start glue so Snacks vs native behavior is handled once per source or via a small adapter.
-- Goal: shrink `picker.lua` to ≲200 lines and make each picker source testable in isolation.
+**Preparation for future persistence features**
+
+Create `lua/buffergolf/stats/`:
+- **`par.lua`**: Edit distance, par estimation, mini.diff analysis
+- **`metrics.lua`**: WPM, character counting, stats assembly
+- **`stats.lua`**: Public API facade
+- **Goal**: Consolidate similar calculations, reduce verbosity
+
+## Phase 5 – Golf Module Split
+
+**Clear separation between layout and navigation**
+
+Create `lua/buffergolf/golf/`:
+- **`window.lua`**: Reference window and mini.diff setup
+- **`navigation.lua`**: Hunk navigation and keymaps
+- **`golf.lua`**: Thin orchestrator
+- **Goal**: Clean separation with minimal code
+
+## Phase 6 – Visual Feedback Organization
+
+**Move session-specific visual module**
+
+Move `visual.lua` to `lua/buffergolf/session/visual.lua`:
+- Ghost text marks management
+- Mismatch highlighting
+- Change watcher attachment
+- Makes sense as it's tightly coupled to session state
+
+## Phase 7 – Utility Consolidation
+
+**Final cleanup**
+
+Create `lua/buffergolf/utils/`:
+- **`buffer.lua`**: Move existing buffer utilities
+- **`keystroke.lua`**: Move existing keystroke tracking
+
+## Implementation Guidelines
+
+1. **NO functional changes** - Pure reorganization only
+2. **Preserve all public APIs** exactly as-is
+3. **Update all require() statements** systematically
+4. **Test after each phase** before proceeding
+5. **One atomic commit per phase** for easy rollback
+
+## Success Metrics
+
+- All files under 300 lines (most under 200)
+- Clear separation of concerns between modules
+- Easier navigation and maintenance
+- Zero behavioral changes
