@@ -44,7 +44,7 @@ function M.init_session(session)
 
       command_depth = 1
       if depth_reset_timer then
-        vim.loop.timer_stop(depth_reset_timer)
+        vim.fn.timer_stop(depth_reset_timer)
       end
       depth_reset_timer = vim.defer_fn(function()
         command_depth, depth_reset_timer = 0, nil
@@ -59,7 +59,7 @@ function M.cleanup_session(session)
   end
 
   if depth_reset_timer then
-    vim.loop.timer_stop(depth_reset_timer)
+    vim.fn.timer_stop(depth_reset_timer)
     depth_reset_timer = nil
   end
 

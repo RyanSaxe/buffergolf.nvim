@@ -1,4 +1,3 @@
-local aggregate = require("buffergolf.stats.aggregate")
 local buffer = require("buffergolf.session.buffer")
 local keystroke = require("buffergolf.session.keystroke")
 local metrics = require("buffergolf.stats.metrics")
@@ -14,7 +13,7 @@ local function get_elapsed_seconds(session)
   if not session.timer_state or not session.timer_state.start_time then
     return 0
   end
-  return math.floor((vim.loop.hrtime() - session.timer_state.start_time) / 1e9)
+  return math.floor((vim.uv.hrtime() - session.timer_state.start_time) / 1e9)
 end
 
 local function get_display_time(session)
@@ -134,7 +133,7 @@ function M.on_first_edit(session)
   if not session.timer_state or session.timer_state.start_time then
     return
   end
-  session.timer_state.start_time = vim.loop.hrtime()
+  session.timer_state.start_time = vim.uv.hrtime()
   M.update_stats_float(session)
 end
 
@@ -179,7 +178,10 @@ function M.init(session)
 
   stats_display.create_stats_window(session)
 
-  local timer = vim.loop.new_timer()
+  local timer = vim.uv.new_timer()
+  if not timer then
+    return
+  end
   session.timer_state.update_timer = timer
   timer:start(
     250,
@@ -190,8 +192,10 @@ function M.init(session)
         or not buffer.win_valid(session.practice_win)
         or not buffer.buf_valid(session.practice_buf)
       then
-        timer:stop()
-        timer:close()
+        if timer then
+          timer:stop()
+          timer:close()
+        end
         return
       end
       M.update_stats_float(session)

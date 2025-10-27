@@ -115,8 +115,6 @@ function M.apply_defaults(session)
     local diag = vim.diagnostic
     if diag and diag.enable then
       pcall(diag.enable, false, { bufnr = buf })
-    elseif diag and diag.disable then
-      pcall(diag.disable, buf)
     end
   end
 
@@ -186,7 +184,7 @@ function M.dedent_lines(lines)
   return result
 end
 
-function M.prepare_lines(lines, bufnr, config)
+function M.prepare_lines(lines, _, config)
   return config.auto_dedent and M.dedent_lines(lines) or lines
 end
 

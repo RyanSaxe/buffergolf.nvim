@@ -45,7 +45,7 @@ function M.calculate_wpm(session)
     return 0
   end
 
-  local elapsed_seconds = (vim.loop.hrtime() - session.timer_state.start_time) / 1e9
+  local elapsed_seconds = (vim.uv.hrtime() - session.timer_state.start_time) / 1e9
   if elapsed_seconds < 0.1 then
     return 0
   end

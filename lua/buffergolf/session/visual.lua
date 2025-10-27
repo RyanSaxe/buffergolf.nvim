@@ -108,14 +108,10 @@ function M.refresh(session)
       if not prev_range or prev_range.start ~= mismatch_start or prev_range.finish ~= mismatch_finish then
         vim.api.nvim_buf_clear_namespace(bufnr, session.ns_mismatch, row - 1, row)
         if mismatch_finish > mismatch_start then
-          vim.api.nvim_buf_add_highlight(
-            bufnr,
-            session.ns_mismatch,
-            session.config.mismatch_hl,
-            row - 1,
-            mismatch_start,
-            mismatch_finish
-          )
+          vim.api.nvim_buf_set_extmark(bufnr, session.ns_mismatch, row - 1, mismatch_start, {
+            end_col = mismatch_finish,
+            hl_group = session.config.mismatch_hl,
+          })
         end
         session.mismatch_ranges[row] = { start = mismatch_start, finish = mismatch_finish }
       end

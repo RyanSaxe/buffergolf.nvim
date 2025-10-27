@@ -2,7 +2,7 @@ local buffer = require("buffergolf.session.buffer")
 
 local M = {}
 
-local function setup_highlights(config)
+local function setup_highlights(_)
   local bg = vim.api.nvim_get_hl(0, { name = "Normal" }).bg or "#1e1e1e"
 
   vim.api.nvim_set_hl(0, "BuffergolfStatsFloat", { bg = bg, fg = "#a8c7fa", blend = 0 })
@@ -174,15 +174,10 @@ function M.render_stats(session, time_str, wpm, keystrokes, par)
     local ns_id = vim.api.nvim_create_namespace("buffergolf_highlights")
     pcall(vim.api.nvim_buf_clear_namespace, stats_buf, ns_id, 0, -1)
     for _, r in ipairs(highlight_ranges) do
-      pcall(
-        vim.api.nvim_buf_add_highlight,
-        stats_buf,
-        ns_id,
-        r.hl,
-        1,
-        left_padding + r.start_byte,
-        left_padding + r.end_byte
-      )
+      pcall(vim.api.nvim_buf_set_extmark, stats_buf, ns_id, 1, left_padding + r.start_byte, {
+        end_col = left_padding + r.end_byte,
+        hl_group = r.hl,
+      })
     end
   end
 end

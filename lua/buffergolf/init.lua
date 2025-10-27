@@ -1,5 +1,4 @@
 local Picker = require("buffergolf.picker.ui")
-local actions = require("buffergolf.session.actions")
 local lifecycle = require("buffergolf.session.lifecycle")
 local storage = require("buffergolf.session.storage")
 
@@ -71,9 +70,9 @@ function M.setup(opts)
     end,
   })
 
-  vim.api.nvim_create_user_command("Buffergolf", function(opts)
-    if opts.range > 0 then
-      M.toggle_with_picker(opts.line1, opts.line2)
+  vim.api.nvim_create_user_command("Buffergolf", function(cmd_opts)
+    if cmd_opts.range > 0 then
+      M.toggle_with_picker(cmd_opts.line1, cmd_opts.line2)
     else
       M.toggle_with_picker()
     end
@@ -83,9 +82,9 @@ function M.setup(opts)
     M.stop()
   end, { desc = "Stop buffergolf practice buffer" })
 
-  vim.api.nvim_create_user_command("BuffergolfCountdown", function(opts)
-    if opts.range > 0 then
-      M.start_countdown(opts.line1, opts.line2)
+  vim.api.nvim_create_user_command("BuffergolfCountdown", function(countdown_opts)
+    if countdown_opts.range > 0 then
+      M.start_countdown(countdown_opts.line1, countdown_opts.line2)
     else
       M.start_countdown()
     end
@@ -271,7 +270,7 @@ function M.get_session_stats(bufnr)
     end
 
     if session.timer_state.start_time then
-      local elapsed_ns = vim.loop.hrtime() - session.timer_state.start_time
+      local elapsed_ns = vim.uv.hrtime() - session.timer_state.start_time
       local elapsed = math.floor(elapsed_ns / 1e9)
       time_str = format_time(elapsed)
     else

@@ -28,9 +28,9 @@ function M.create_reference_window(session)
   vim.api.nvim_win_set_buf(ref_win, ref_buf)
 
   if position == "left" or position == "right" then
-    vim.api.nvim_win_set_width(ref_win, math.floor(vim.api.nvim_get_option("columns") * size / 100))
+    vim.api.nvim_win_set_width(ref_win, math.floor(vim.o.columns * size / 100))
   else
-    local height = size <= 100 and math.floor(vim.api.nvim_get_option("lines") * size / 100) or size
+    local height = size <= 100 and math.floor(vim.o.lines * size / 100) or size
     vim.api.nvim_win_set_height(ref_win, height)
   end
 
