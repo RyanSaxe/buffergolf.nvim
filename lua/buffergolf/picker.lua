@@ -1,24 +1,31 @@
 local M = {}
 local buffer = require("buffergolf.buffer")
 
+-- Cache for git repository check
+local git_repo_cache = {}
+
 -- Check if Snacks.nvim is available
 local function has_snacks()
   return pcall(require, 'snacks.picker')
 end
 
--- Check if we're in a git repository
+-- Check if we're in a git repository (with caching)
 local function is_git_repo()
-  local handle = vim.loop.spawn("git", {
-    args = {"rev-parse", "--is-inside-work-tree"},
-    stdio = {nil, nil, nil}
-  }, function() end)
+  local cwd = vim.fn.getcwd()
 
-  if handle then
-    vim.loop.process_kill(handle, 9)
-    vim.loop.close(handle)
-    return true
+  -- Return cached result if available
+  if git_repo_cache[cwd] ~= nil then
+    return git_repo_cache[cwd]
   end
-  return false
+
+  -- Check git repository status
+  vim.fn.system({"git", "rev-parse", "--is-inside-work-tree"})
+  local is_repo = vim.v.shell_error == 0
+
+  -- Cache the result
+  git_repo_cache[cwd] = is_repo
+
+  return is_repo
 end
 
 -- Start typing practice mode (empty buffer)
