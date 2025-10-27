@@ -190,8 +190,8 @@ local function create_stats_window(session)
 	local stats_win = vim.api.nvim_get_current_win()
 	vim.api.nvim_win_set_buf(stats_win, stats_buf)
 
-	-- Set fixed height (2 lines: content + separator)
-	vim.api.nvim_win_set_height(stats_win, 2)
+	-- Set fixed height (top padding + content + bottom padding + separator)
+	vim.api.nvim_win_set_height(stats_win, 3)
 
 	-- Configure window options
 	vim.api.nvim_set_option_value("number", false, { win = stats_win })
@@ -249,26 +249,36 @@ local function get_diff_icons()
 	}
 end
 
--- Format diff summary with icons
-local function format_diff_summary(summary)
+local function build_diff_segments(summary)
 	if not summary then
-		return ""
+		return {}
 	end
 
 	local diff_icons = get_diff_icons()
+	local segments = {}
 
-	local parts = {}
 	if summary.add and summary.add > 0 then
-		table.insert(parts, string.format("%s%d", diff_icons.add, summary.add))
-	end
-	if summary.delete and summary.delete > 0 then
-		table.insert(parts, string.format("%s%d", diff_icons.delete, summary.delete))
-	end
-	if summary.change and summary.change > 0 then
-		table.insert(parts, string.format("%s%d", diff_icons.change, summary.change))
+		table.insert(segments, {
+			text = string.format("%s%d", diff_icons.add, summary.add),
+			hl = "MiniDiffSignAdd",
+		})
 	end
 
-	return table.concat(parts, " ")
+	if summary.delete and summary.delete > 0 then
+		table.insert(segments, {
+			text = string.format("%s%d", diff_icons.delete, summary.delete),
+			hl = "MiniDiffSignDelete",
+		})
+	end
+
+	if summary.change and summary.change > 0 then
+		table.insert(segments, {
+			text = string.format("%s%d", diff_icons.change, summary.change),
+			hl = "MiniDiffSignChange",
+		})
+	end
+
+	return segments
 end
 
 function M.update_stats_float(session)
@@ -325,13 +335,17 @@ function M.update_stats_float(session)
 	local keystrokes = stats.get_keystroke_count(session)
 	local par = session.par or 0
 
-	-- Build left-aligned stats: Time and Score/WPM only
-	local left_parts = {}
+	-- Compose stats sections to render in a single centered line
+	local sections = {}
 
-	-- Time with label
-	table.insert(left_parts, string.format("Time: %s", time_str))
+	local function add_section_text(text)
+		table.insert(sections, {
+			{ text = text },
+		})
+	end
 
-	-- Score/WPM
+	add_section_text(string.format("Time: %s", time_str))
+
 	local score_display
 	if session.mode == "golf" then
 		-- Golf mode: Show score percentage
@@ -352,45 +366,63 @@ function M.update_stats_float(session)
 		-- Typing mode: Show WPM
 		score_display = string.format("WPM: %d", wpm)
 	end
-	table.insert(left_parts, score_display)
-
-	local left_str = table.concat(left_parts, " │ ")
-
-	-- Build right-aligned stats: Keys, Par, and optionally Diff summary
-	local right_parts = {}
-
-	-- Keystrokes
-	table.insert(right_parts, string.format("Keys: %d", keystrokes))
-
-	-- Par
-	table.insert(right_parts, string.format("Par: %d", par))
+	add_section_text(score_display)
+	add_section_text(string.format("Keys: %d", keystrokes))
+	add_section_text(string.format("Par: %d", par))
 
 	-- Diff summary (golf mode only)
 	if session.mode == "golf" and session.reference_buf then
 		local summary = get_diff_summary(session.reference_buf)
-		if summary then
-			local diff_str = format_diff_summary(summary)
-			if diff_str ~= "" then
-				table.insert(right_parts, diff_str)
+		local diff_segments = build_diff_segments(summary)
+		if #diff_segments > 0 then
+			local spaced_segments = {}
+			for i, segment in ipairs(diff_segments) do
+				if i > 1 then
+					table.insert(spaced_segments, { text = " " })
+				end
+				table.insert(spaced_segments, segment)
 			end
+			table.insert(sections, spaced_segments)
 		end
 	end
 
-	local right_str = table.concat(right_parts, " │ ")
+	-- Flatten sections into segments, inserting separators between sections
+	local line_segments = {}
+	for section_index, section in ipairs(sections) do
+		if section_index > 1 then
+			table.insert(line_segments, { text = " │ " })
+		end
+		for _, segment in ipairs(section) do
+			table.insert(line_segments, segment)
+		end
+	end
 
-	-- Calculate padding between left and right
-	local left_width = vim.fn.strdisplaywidth(left_str)
-	local right_width = vim.fn.strdisplaywidth(right_str)
-	local padding_width = math.max(1, win_width - left_width - right_width)
-	local padding = string.rep(" ", padding_width)
+	-- Build the stats line and capture highlight ranges for diff segments
+	local stats_line = ""
+	local highlight_ranges = {}
+	for _, segment in ipairs(line_segments) do
+		local start_byte = #stats_line
+		stats_line = stats_line .. segment.text
+		if segment.hl then
+			table.insert(highlight_ranges, {
+				hl = segment.hl,
+				start_byte = start_byte,
+				end_byte = start_byte + #segment.text,
+			})
+		end
+	end
 
-	-- Build the main line
-	local main_line = left_str .. padding .. right_str
+	-- Center the stats line within the available width
+	local stats_width = vim.fn.strdisplaywidth(stats_line)
+	local left_padding = math.max(0, math.floor((win_width - stats_width) / 2))
+	local padded_line = string.rep(" ", left_padding) .. stats_line
 
 	-- Create multi-line content with visual separator
 	local separator = string.rep("─", win_width)
 	local content_lines = {
-		" " .. main_line, -- Main content with left padding
+		"", -- Top padding
+		padded_line, -- Centered stats content
+		-- "", -- Bottom padding
 		separator, -- Bottom border
 	}
 
@@ -412,69 +444,17 @@ function M.update_stats_float(session)
 	pcall(vim.api.nvim_buf_clear_namespace, session.timer_state.stats_buf, ns_id, 0, -1)
 
 	-- Apply diff summary highlighting (golf mode only)
-	if session.mode == "golf" and session.reference_buf and #right_parts > 2 then
-		local summary = get_diff_summary(session.reference_buf)
-		if summary then
-			-- The line is: " " .. main_line where main_line = left_str .. padding .. right_str
-			-- We need byte position, not display width
-			-- Calculate the byte position where diff summary starts
-			local prefix = " " .. left_str .. padding .. right_parts[1] .. " │ " .. right_parts[2] .. " │ "
-			local diff_start_byte = #prefix -- Byte offset where diff summary begins
-
-			-- Get the actual diff string components - must match format_diff_summary()
-			local diff_icons = get_diff_icons()
-
-			local current_byte = diff_start_byte
-
-			-- Build and highlight each component
-			local parts = {}
-
-			-- Add
-			if summary.add and summary.add > 0 then
-				local add_str = string.format("%s%d", diff_icons.add, summary.add)
-				table.insert(parts, {
-					str = add_str,
-					hl = "MiniDiffSignAdd",
-				})
-			end
-
-			-- Delete
-			if summary.delete and summary.delete > 0 then
-				local delete_str = string.format("%s%d", diff_icons.delete, summary.delete)
-				table.insert(parts, {
-					str = delete_str,
-					hl = "MiniDiffSignDelete",
-				})
-			end
-
-			-- Change
-			if summary.change and summary.change > 0 then
-				local change_str = string.format("%s%d", diff_icons.change, summary.change)
-				table.insert(parts, {
-					str = change_str,
-					hl = "MiniDiffSignChange",
-				})
-			end
-
-			-- Apply highlights
-			for i, part in ipairs(parts) do
-				local byte_len = #part.str
-				pcall(
-					vim.api.nvim_buf_add_highlight,
-					session.timer_state.stats_buf,
-					ns_id,
-					part.hl,
-					0, -- Main content line
-					current_byte,
-					current_byte + byte_len
-				)
-				current_byte = current_byte + byte_len
-
-				-- Add space separator byte if not the last part
-				if i < #parts then
-					current_byte = current_byte + 1 -- Space separator
-				end
-			end
+	if #highlight_ranges > 0 then
+		for _, range in ipairs(highlight_ranges) do
+			pcall(
+				vim.api.nvim_buf_add_highlight,
+				session.timer_state.stats_buf,
+				ns_id,
+				range.hl,
+				1, -- Main content line (0-based indexing with top padding)
+				left_padding + range.start_byte,
+				left_padding + range.end_byte
+			)
 		end
 	end
 end
