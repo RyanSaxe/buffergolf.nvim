@@ -1,5 +1,7 @@
-local Session = require("buffergolf.session")
-local Picker = require("buffergolf.picker")
+local lifecycle = require("buffergolf.session.lifecycle")
+local storage = require("buffergolf.session.storage")
+local actions = require("buffergolf.session.actions")
+local Picker = require("buffergolf.picker.ui")
 
 local M = {}
 
@@ -137,8 +139,8 @@ end
 -- Legacy toggle function for backward compatibility
 function M.toggle()
 	local bufnr = vim.api.nvim_get_current_buf()
-	if Session.is_active(bufnr) then
-		Session.stop(bufnr)
+	if storage.is_active(bufnr) then
+		lifecycle.stop(bufnr)
 	else
 		-- Use picker for new behavior
 		M.toggle_with_picker()
@@ -148,8 +150,8 @@ end
 -- New toggle function that shows the picker
 function M.toggle_with_picker(start_line, end_line)
 	local bufnr = vim.api.nvim_get_current_buf()
-	if Session.is_active(bufnr) then
-		Session.stop(bufnr)
+	if storage.is_active(bufnr) then
+		lifecycle.stop(bufnr)
 	else
 		Picker.show_picker(bufnr, start_line, end_line, M.config)
 	end
@@ -158,28 +160,28 @@ end
 -- Direct start without picker (for backward compatibility)
 function M.toggle_legacy()
 	local bufnr = vim.api.nvim_get_current_buf()
-	if Session.is_active(bufnr) then
-		Session.stop(bufnr)
+	if storage.is_active(bufnr) then
+		lifecycle.stop(bufnr)
 	else
-		Session.start(bufnr, M.config)
+		lifecycle.start(bufnr, M.config)
 	end
 end
 
 function M.start()
-	Session.start(vim.api.nvim_get_current_buf(), M.config)
+	lifecycle.start(vim.api.nvim_get_current_buf(), M.config)
 end
 
 function M.stop()
-	Session.stop(vim.api.nvim_get_current_buf())
+	lifecycle.stop(vim.api.nvim_get_current_buf())
 end
 
 -- Start typing practice (empty start) without picker
 function M.start_typing()
 	local bufnr = vim.api.nvim_get_current_buf()
-	if Session.is_active(bufnr) then
-		Session.stop(bufnr)
+	if storage.is_active(bufnr) then
+		lifecycle.stop(bufnr)
 	end
-	Session.start(bufnr, M.config)
+	lifecycle.start(bufnr, M.config)
 end
 
 function M.start_countdown(start_line, end_line)
@@ -192,14 +194,14 @@ function M.start_countdown(start_line, end_line)
 		end
 
 		-- Check if there's already an active session
-		if Session.is_active(bufnr) then
+		if storage.is_active(bufnr) then
 			-- Reset the session to start
-			Session.reset_to_start(bufnr)
+			lifecycle.reset_to_start(bufnr)
 
 			-- Handle empty input - count-up mode
 			if input == "" then
 				-- Start count-up mode (no countdown)
-				Session.start_countdown(bufnr, nil)
+				lifecycle.start_countdown(bufnr, nil)
 			else
 				-- Handle numeric input - countdown mode
 				local seconds = tonumber(input)
@@ -207,7 +209,7 @@ function M.start_countdown(start_line, end_line)
 					vim.notify("Invalid duration. Please enter a positive number.", vim.log.levels.ERROR, { title = "buffergolf" })
 					return
 				end
-				Session.start_countdown(bufnr, seconds)
+				lifecycle.start_countdown(bufnr, seconds)
 			end
 		else
 			-- No active session - show picker for new session
@@ -241,19 +243,18 @@ end
 function M.get_session_stats(bufnr)
 	bufnr = bufnr or vim.api.nvim_get_current_buf()
 
-	if not Session.is_active(bufnr) then
+	if not storage.is_active(bufnr) then
 		return nil
 	end
 
 	-- Get the session
-	local session = Session.get(bufnr)
+	local session = storage.get(bufnr)
 	if not session or not session.timer_state then
 		return nil
 	end
 
 	-- Build stats table
-	local stats_module = require("buffergolf.stats")
-	local timer_module = require("buffergolf.timer")
+	local metrics = require("buffergolf.stats.metrics")
 
 	local time_str
 	if session.timer_state.locked or session.timer_state.completed then
@@ -275,8 +276,8 @@ function M.get_session_stats(bufnr)
 		end
 	end
 
-	local wpm = stats_module.calculate_wpm(session)
-	local keystrokes = stats_module.get_keystroke_count(session)
+	local wpm = metrics.calculate_wpm(session)
+	local keystrokes = metrics.get_keystroke_count(session)
 	local par = session.par or 0
 
 	-- Calculate score if golf mode

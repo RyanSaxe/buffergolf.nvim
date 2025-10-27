@@ -1,5 +1,5 @@
-local buffer = require("buffergolf.buffer")
-local keystroke = require("buffergolf.keystroke")
+local buffer = require("buffergolf.session.buffer")
+local keystroke = require("buffergolf.session.keystroke")
 
 local M = {}
 

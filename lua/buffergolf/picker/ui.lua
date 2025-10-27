@@ -1,5 +1,5 @@
--- Picker module facade
-local buffer = require("buffergolf.buffer")
+-- Picker UI orchestration
+local buffer = require("buffergolf.session.buffer")
 local file_source = require("buffergolf.picker.sources.file")
 local buffer_source = require("buffergolf.picker.sources.buffer")
 local register_source = require("buffergolf.picker.sources.register")
@@ -18,15 +18,16 @@ local function is_git_repo()
 end
 
 local function start_session(origin_buf, target_lines, config, is_typing, start_lines)
-	local Session = require("buffergolf.session")
+	local lifecycle = require("buffergolf.session.lifecycle")
 	if is_typing then
-		Session.start(origin_buf, config, target_lines)
+		lifecycle.start(origin_buf, config, target_lines)
 	else
 		start_lines = buffer.prepare_lines(start_lines, origin_buf, config)
-		Session.start_golf(origin_buf, start_lines, target_lines, config)
+		lifecycle.start_golf(origin_buf, start_lines, target_lines, config)
 	end
 	if config.countdown_mode and config.countdown_seconds then
-		Session.start_countdown(vim.api.nvim_get_current_buf(), config.countdown_seconds)
+		local actions = require("buffergolf.session.actions")
+		actions.start_countdown(vim.api.nvim_get_current_buf(), config.countdown_seconds)
 	end
 end
 

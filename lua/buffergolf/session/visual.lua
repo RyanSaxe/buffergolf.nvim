@@ -1,4 +1,4 @@
-local buffer = require("buffergolf.buffer")
+local buffer = require("buffergolf.session.buffer")
 
 local M = {}
 

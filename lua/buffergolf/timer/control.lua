@@ -1,6 +1,7 @@
-local stats = require("buffergolf.stats")
-local buffer = require("buffergolf.buffer")
-local keystroke = require("buffergolf.keystroke")
+local aggregate = require("buffergolf.stats.aggregate")
+local metrics = require("buffergolf.stats.metrics")
+local buffer = require("buffergolf.session.buffer")
+local keystroke = require("buffergolf.session.keystroke")
 local stats_display = require("buffergolf.timer.stats_display")
 
 local M = {}
@@ -41,8 +42,8 @@ end
 local function freeze_stats(session)
 	if session.timer_state.frozen_time then return end
 	session.timer_state.frozen_time = get_display_time(session)
-	session.timer_state.frozen_wpm = stats.calculate_wpm(session)
-	session.timer_state.frozen_keystrokes = stats.get_keystroke_count(session)
+	session.timer_state.frozen_wpm = metrics.calculate_wpm(session)
+	session.timer_state.frozen_keystrokes = metrics.get_keystroke_count(session)
 end
 
 local function complete_session(session, reason)
@@ -93,8 +94,8 @@ function M.update_stats_float(session)
 	end
 
 	local time_str = ts.frozen_time or get_display_time(session)
-	local wpm = ts.frozen_wpm or stats.calculate_wpm(session)
-	local keystrokes = stats.get_keystroke_count(session)
+	local wpm = ts.frozen_wpm or metrics.calculate_wpm(session)
+	local keystrokes = metrics.get_keystroke_count(session)
 	local par = session.par or 0
 
 	stats_display.render_stats(session, time_str, wpm, keystrokes, par)

@@ -1,6 +1,6 @@
-local buffer = require("buffergolf.buffer")
-local visual = require("buffergolf.visual")
-local timer = require("buffergolf.timer")
+local buffer = require("buffergolf.session.buffer")
+local visual = require("buffergolf.session.visual")
+local timer = require("buffergolf.timer.control")
 
 local M = {}
 
