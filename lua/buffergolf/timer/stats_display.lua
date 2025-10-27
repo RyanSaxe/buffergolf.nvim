@@ -162,7 +162,18 @@ function M.render_stats(session, time_str, wpm, keystrokes, par)
   end
 
   local left_padding = math.max(0, math.floor((win_width - vim.fn.strdisplaywidth(stats_line)) / 2))
-  local content_lines = { "", string.rep(" ", left_padding) .. stats_line, string.rep("─", win_width) }
+
+  -- Get position from config to determine underline placement
+  local stats_config = (session.config.windows and session.config.windows.stats) or {}
+  local position = stats_config.position or "top"
+
+  -- Place underline above stats when window is at bottom, below when at top
+  local content_lines
+  if position == "bottom" then
+    content_lines = { string.rep("─", win_width), string.rep(" ", left_padding) .. stats_line, "" }
+  else
+    content_lines = { "", string.rep(" ", left_padding) .. stats_line, string.rep("─", win_width) }
+  end
 
   local winhl = session.timer_state.completed
       and "Normal:BuffergolfStatsComplete,FloatBorder:BuffergolfStatsBorderComplete"
@@ -176,8 +187,10 @@ function M.render_stats(session, time_str, wpm, keystrokes, par)
   if #highlight_ranges > 0 then
     local ns_id = vim.api.nvim_create_namespace("buffergolf_highlights")
     pcall(vim.api.nvim_buf_clear_namespace, stats_buf, ns_id, 0, -1)
+    -- Stats line is on line 1 (index 1) when position is "bottom", line 1 when "top"
+    local stats_line_idx = 1 -- Both positions now have stats on line index 1 (0-based)
     for _, r in ipairs(highlight_ranges) do
-      pcall(vim.api.nvim_buf_set_extmark, stats_buf, ns_id, 1, left_padding + r.start_byte, {
+      pcall(vim.api.nvim_buf_set_extmark, stats_buf, ns_id, stats_line_idx, left_padding + r.start_byte, {
         end_col = left_padding + r.end_byte,
         hl_group = r.hl,
       })

@@ -1,8 +1,6 @@
 local M = {}
 
 local defaults = {
-  ghost_hl = "BuffergolfGhost",
-  mismatch_hl = "BuffergolfMismatch",
   disabled_plugins = "auto",
   typing_mode = {
     disabled_plugins = { _inherit = true, matchparen = true, treesitter_context = true },

@@ -17,17 +17,17 @@ local function can_link(name)
   return ok and hl ~= nil
 end
 
-local function ensure_highlights(opts)
-  if not hl_exists(opts.ghost_hl) then
+local function ensure_highlights()
+  if not hl_exists("BuffergolfGhost") then
     if can_link("Comment") then
-      vim.api.nvim_set_hl(0, opts.ghost_hl, { link = "Comment" })
+      vim.api.nvim_set_hl(0, "BuffergolfGhost", { link = "Comment" })
     else
-      vim.api.nvim_set_hl(0, opts.ghost_hl, { fg = "#555555", ctermfg = 8 })
+      vim.api.nvim_set_hl(0, "BuffergolfGhost", { fg = "#555555", ctermfg = 8 })
     end
   end
 
-  if not hl_exists(opts.mismatch_hl) then
-    vim.api.nvim_set_hl(0, opts.mismatch_hl, {
+  if not hl_exists("BuffergolfMismatch") then
+    vim.api.nvim_set_hl(0, "BuffergolfMismatch", {
       fg = "#ff5f6d",
       ctermfg = 1,
       underline = true,
@@ -41,7 +41,7 @@ function M.setup(opts)
   end
 
   M.config = config.setup(opts)
-  ensure_highlights(M.config)
+  ensure_highlights()
 
   local keymaps = M.config.keymaps or {}
   local toggle_key = keymaps.toggle
@@ -49,7 +49,7 @@ function M.setup(opts)
   vim.api.nvim_create_autocmd("ColorScheme", {
     group = vim.api.nvim_create_augroup("BuffergolfHL", { clear = true }),
     callback = function()
-      ensure_highlights(M.config)
+      ensure_highlights()
     end,
   })
 

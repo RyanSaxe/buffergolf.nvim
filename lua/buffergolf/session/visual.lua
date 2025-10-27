@@ -57,7 +57,7 @@ function M.set_ghost_mark(session, row, col, text, actual)
 
   local virt_text = text:find("\t") and expand_tabs(text, actual or "", session.practice_buf) or text
   local opts = {
-    virt_text = { { virt_text, session.config.ghost_hl } },
+    virt_text = { { virt_text, "BuffergolfGhost" } },
     virt_text_pos = "inline",
     hl_mode = "combine",
     priority = session.prio_ghost,
@@ -110,7 +110,7 @@ function M.refresh(session)
         if mismatch_finish > mismatch_start then
           vim.api.nvim_buf_set_extmark(bufnr, session.ns_mismatch, row - 1, mismatch_start, {
             end_col = mismatch_finish,
-            hl_group = session.config.mismatch_hl,
+            hl_group = "BuffergolfMismatch",
           })
         end
         session.mismatch_ranges[row] = { start = mismatch_start, finish = mismatch_finish }
