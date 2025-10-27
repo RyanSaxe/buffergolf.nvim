@@ -190,8 +190,8 @@ local function create_stats_window(session)
 	local stats_win = vim.api.nvim_get_current_win()
 	vim.api.nvim_win_set_buf(stats_win, stats_buf)
 
-	-- Set fixed height (4 lines to ensure underline shows)
-	vim.api.nvim_win_set_height(stats_win, 4)
+	-- Set fixed height (2 lines: content + separator)
+	vim.api.nvim_win_set_height(stats_win, 2)
 
 	-- Configure window options
 	vim.api.nvim_set_option_value("number", false, { win = stats_win })
@@ -390,7 +390,6 @@ function M.update_stats_float(session)
 	-- Create multi-line content with visual separator
 	local separator = string.rep("─", win_width)
 	local content_lines = {
-		"", -- Empty line for spacing
 		" " .. main_line, -- Main content with left padding
 		separator, -- Bottom border
 	}
@@ -465,7 +464,7 @@ function M.update_stats_float(session)
 					session.timer_state.stats_buf,
 					ns_id,
 					part.hl,
-					1, -- Second line (0-indexed) - main content line
+					0, -- Main content line
 					current_byte,
 					current_byte + byte_len
 				)
