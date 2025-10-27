@@ -20,11 +20,6 @@ local default_config = {
 		position = "right",  -- "right", "left", "top", "bottom"
 		size = 50,          -- percentage of screen for vertical splits, or lines for horizontal
 	},
-	stats = {
-		position = "top",           -- position of stats bar (currently only "top" supported)
-		height = 3,                 -- height of stats bar in lines (matches virtual padding)
-		show_diff_summary = true,   -- show mini.diff summary in golf mode
-	},
 	auto_dedent = true,            -- Strip common leading whitespace
 }
 
