@@ -57,6 +57,7 @@ local function complete_session(session, reason)
 	if buffer.buf_valid(session.practice_buf) then
 		pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = session.practice_buf })
 		pcall(vim.api.nvim_set_option_value, "readonly", true, { buf = session.practice_buf })
+		pcall(vim.api.nvim_set_option_value, "modified", false, { buf = session.practice_buf })
 	end
 
 	local messages = { completed = "Buffergolf completed! 🎉", time_up = "Time's up!" }

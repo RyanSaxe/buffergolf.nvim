@@ -36,7 +36,7 @@ end
 local function setup_practice_buffer(practice_buf, origin_buf, origin_ft)
 	local opts = {
 		bufhidden = "wipe", swapfile = false, undofile = false,
-		modifiable = true, buflisted = false, buftype = ""
+		modifiable = true, buflisted = false, buftype = "nofile"
 	}
 	for opt, val in pairs(opts) do
 		vim.api.nvim_set_option_value(opt, val, { buf = practice_buf })
