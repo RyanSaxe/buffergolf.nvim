@@ -101,13 +101,7 @@ function M.calculate_par(session_or_ref, start_lines)
     if not par and start_lines and reference_lines then
       par = M.calculate_edit_distance(start_lines, reference_lines)
     end
-    par = par or 0
-
-    if session.config and session.config.difficulty then
-      local mult = ({ easy = 1.0, medium = 0.67, hard = 0.5, expert = 0.33 })[session.config.difficulty] or 0.67
-      par = math.floor(par * mult + 0.5)
-    end
-    return par
+    return par or 0
   end
 
   return typing_mode_par(reference_lines)

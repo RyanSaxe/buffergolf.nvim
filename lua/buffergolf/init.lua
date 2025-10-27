@@ -1,26 +1,9 @@
 local Picker = require("buffergolf.picker.ui")
+local config = require("buffergolf.config")
 local lifecycle = require("buffergolf.session.lifecycle")
 local storage = require("buffergolf.session.storage")
 
 local M = {}
-
-local default_config = {
-  ghost_hl = "BuffergolfGhost",
-  mismatch_hl = "BuffergolfMismatch",
-  disable_diagnostics = true,
-  disable_inlay_hints = true,
-  disable_matchparen = true,
-  difficulty = "medium", -- "easy" (1.0x), "medium" (0.67x), "hard" (0.5x), "expert" (0.33x)
-  keymaps = {
-    toggle = "<leader>bg",
-    countdown = "<leader>bG",
-  },
-  reference_window = {
-    position = "right", -- "right", "left", "top", "bottom"
-    size = 50, -- percentage of screen for vertical splits, or lines for horizontal
-  },
-  auto_dedent = true, -- Strip common leading whitespace
-}
 
 local configured = false
 
@@ -57,7 +40,7 @@ function M.setup(opts)
     return
   end
 
-  M.config = vim.tbl_deep_extend("force", {}, default_config, opts or {})
+  M.config = config.setup(opts)
   ensure_highlights(M.config)
 
   local keymaps = M.config.keymaps or {}

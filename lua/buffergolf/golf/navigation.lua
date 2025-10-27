@@ -64,18 +64,16 @@ function M.setup(session)
     return
   end
 
-  local keymaps = (session.config and session.config.keymaps and session.config.keymaps.golf_mode) or {}
-  local defaults = {
+  local keymaps = (session.config and session.config.keymaps and session.config.keymaps.golf) or {}
+
+  -- Use configured keymaps, falling back to defaults
+  keymaps = vim.tbl_extend("keep", keymaps, {
     next_hunk = "]h",
     prev_hunk = "[h",
     first_hunk = "[H",
     last_hunk = "]H",
     toggle_overlay = "<leader>do",
-  }
-
-  for key, default in pairs(defaults) do
-    keymaps[key] = keymaps[key] or default
-  end
+  })
 
   local commands = {
     { "BuffergolfNextHunk", "next", "Go to next diff hunk (synchronized)" },

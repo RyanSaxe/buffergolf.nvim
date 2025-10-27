@@ -1,3 +1,5 @@
+local disabled_plugins = require("buffergolf.disabled_plugins")
+
 local M = {}
 
 function M.buf_valid(bufnr)
@@ -108,58 +110,35 @@ function M.strip_trailing_empty_lines(lines)
 end
 
 function M.apply_defaults(session)
-  local buf = session.practice_buf
-  local config = session.config
+  local ctx = disabled_plugins.create_context({
+    buf = session.practice_buf,
+    win = session.practice_win,
+    mode = session.mode,
+    origin_buf = session.origin_buf,
+  })
 
-  if config.disable_diagnostics ~= false then
-    local diag = vim.diagnostic
-    if diag and diag.enable then
-      pcall(diag.enable, false, { bufnr = buf })
-    end
-  end
-
-  if config.disable_inlay_hints ~= false then
-    local ih = vim.lsp and vim.lsp.inlay_hint
-    if ih then
-      if type(ih) == "table" and ih.enable then
-        pcall(ih.enable, false, { bufnr = buf })
-      elseif type(ih) == "table" and ih.disable then
-        pcall(ih.disable, buf)
-      elseif type(ih) == "function" then
-        pcall(ih, buf, false)
-      end
-    end
-  end
-
-  if config.disable_autopairs ~= false then
-    pcall(vim.api.nvim_buf_set_var, buf, "autopairs_enabled", false)
-    pcall(vim.api.nvim_buf_set_var, buf, "minipairs_disable", true)
-  end
-end
-
-function M.disable_matchparen(session)
-  if session.config.disable_matchparen == false then
-    return
-  end
-
-  local win = session.practice_win
-  if not M.win_valid(win) then
-    return
-  end
-
-  if session.prev_winhighlight == nil then
-    local ok, prev = pcall(vim.api.nvim_get_option_value, "winhighlight", { win = win })
+  -- Store original winhighlight if needed
+  local dp = session.config.disabled_plugins
+  local will_disable = dp == "auto"
+    or (type(dp) == "table" and (dp._auto and dp.matchparen ~= false or dp.matchparen == true))
+  if will_disable and not session.prev_winhighlight then
+    local ok, prev = pcall(vim.api.nvim_get_option_value, "winhighlight", { win = session.practice_win })
     session.prev_winhighlight = ok and prev or ""
   end
 
-  local ok, current = pcall(vim.api.nvim_get_option_value, "winhighlight", { win = win })
-  local value = ok and current or ""
-  value = value:match("MatchParen:") and value:gsub("MatchParen:[^,%s]+", "MatchParen:None")
-    or (value ~= "" and value .. ",MatchParen:None" or "MatchParen:None")
-  vim.api.nvim_set_option_value("winhighlight", value, { win = win })
+  disabled_plugins.apply(session.config, ctx)
 
-  if M.buf_valid(session.practice_buf) then
-    pcall(vim.api.nvim_buf_set_var, session.practice_buf, "matchup_matchparen_enabled", 0)
+  -- Apply to reference buffer too
+  if session.reference_buf and M.buf_valid(session.reference_buf) and session.reference_win then
+    disabled_plugins.apply(
+      session.config,
+      disabled_plugins.create_context({
+        buf = session.reference_buf,
+        win = session.reference_win,
+        mode = session.mode,
+        origin_buf = session.origin_buf,
+      })
+    )
   end
 end
 

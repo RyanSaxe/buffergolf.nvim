@@ -1,5 +1,6 @@
 local autocmds = require("buffergolf.session.autocmds")
 local buffer = require("buffergolf.session.buffer")
+local config = require("buffergolf.config")
 local golf_nav = require("buffergolf.golf.navigation")
 local golf_window = require("buffergolf.golf.window")
 local keystroke = require("buffergolf.session.keystroke")
@@ -85,11 +86,14 @@ local function create_session(origin_buf, practice_buf, reference, config, mode,
 end
 
 local function init_session_common(session)
+  -- Get mode-specific configuration
+  local mode_config = config.get_mode_config(session.mode)
+  session.config = mode_config
+
   storage.store(session)
   buffer.apply_defaults(session)
   vim.api.nvim_win_set_buf(session.origin_win, session.practice_buf)
   session.practice_win = vim.api.nvim_get_current_win()
-  buffer.disable_matchparen(session)
   autocmds.setup(session)
   autocmds.setup_change_watcher(session)
   keystroke.init_session(session)

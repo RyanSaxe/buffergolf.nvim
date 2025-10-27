@@ -17,7 +17,7 @@ function M.create_reference_window(session)
     vim.api.nvim_set_option_value("filetype", ft, { buf = ref_buf })
   end
 
-  local ref_config = session.config.reference_window or {}
+  local ref_config = (session.config.windows and session.config.windows.reference) or {}
   local position, size = ref_config.position or "right", ref_config.size or 50
 
   local split_cmds =

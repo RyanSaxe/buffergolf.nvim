@@ -28,14 +28,17 @@ function M.create_stats_window(session)
   end
   pcall(vim.api.nvim_buf_set_name, stats_buf, "BuffergolfStats")
 
-  local position = (session.config.stats_window and session.config.stats_window.position) or "top"
+  local stats_config = (session.config.windows and session.config.windows.stats) or {}
+  local position = stats_config.position or "top"
+  local height = stats_config.height or 3
+
   local orig_win = vim.api.nvim_get_current_win()
   vim.api.nvim_set_current_win(session.practice_win)
   vim.cmd(position == "bottom" and "rightbelow split" or "leftabove split")
 
   local stats_win = vim.api.nvim_get_current_win()
   vim.api.nvim_win_set_buf(stats_win, stats_buf)
-  vim.api.nvim_win_set_height(stats_win, 3)
+  vim.api.nvim_win_set_height(stats_win, height)
 
   local win_opts = {
     number = false,
