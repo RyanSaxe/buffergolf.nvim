@@ -77,14 +77,19 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then
             sudo luarocks install luacov
+            # Add luarocks bin to PATH for the luacov command
+            echo "$(luarocks path --lr-bin)" >> $GITHUB_PATH
           else
             luarocks --local install luacov
+            # Add local luarocks bin to PATH for the luacov command
+            echo "$(luarocks path --lr-bin)" >> $GITHUB_PATH
           fi
           # Export luarocks paths so Neovim can find luacov
           # The ;; at the end includes default Lua search paths
           echo "LUA_PATH=$(luarocks path --lr-path);;" >> $GITHUB_ENV
           echo "LUA_CPATH=$(luarocks path --lr-cpath);;" >> $GITHUB_ENV
           echo "Installed luacov, LUA_PATH: $(luarocks path --lr-path)"
+          echo "Luarocks bin path: $(luarocks path --lr-bin)"
 
       - name: Cache test dependencies
         uses: actions/cache@v4

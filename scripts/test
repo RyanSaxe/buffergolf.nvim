@@ -18,11 +18,21 @@ if [[ "$1" == "--coverage" ]] && [ $EXIT_CODE -eq 0 ]; then
   # Check if stats file was generated
   if [ -f luacov.stats.out ]; then
     # Run luacov to generate the report from stats
+    # First try the luacov command directly
     if command -v luacov &> /dev/null; then
       luacov
     else
-      echo "Warning: luacov command not found. Trying with lua..."
-      lua -lluacov.runner -e "require('luacov.runner').load_config(); require('luacov.reporter').report()"
+      # Try to find and run luacov through luarocks
+      echo "Looking for luacov via luarocks..."
+      LUACOV_PATH=$(luarocks path --lr-bin 2>/dev/null)
+
+      if [ -n "$LUACOV_PATH" ] && [ -f "$LUACOV_PATH/luacov" ]; then
+        "$LUACOV_PATH/luacov"
+      else
+        # Last resort: use Lua with proper paths
+        echo "Running luacov reporter directly with Lua..."
+        LUA_PATH="$(luarocks path --lr-path);;" LUA_CPATH="$(luarocks path --lr-cpath);;" lua -e "require('luacov.runner').load_config(); require('luacov.reporter').report()"
+      fi
     fi
   fi
 

@@ -1,8 +1,56 @@
 #!/usr/bin/env -S nvim -l
 
--- Always try to load luacov for coverage tracking (if available)
--- This is lightweight and doesn't affect test performance
-pcall(require, "luacov")
+-- Setup package paths for luacov (when running with nvim -l, the environment needs help)
+-- This ensures luacov can be found even when running as a script
+local function setup_luacov_paths()
+  -- Get luarocks paths if not already set
+  if not vim.env.LUA_PATH or vim.env.LUA_PATH == "" then
+    local handle = io.popen("luarocks path --lr-path 2>/dev/null")
+    if handle then
+      local result = handle:read("*a")
+      handle:close()
+      if result and result ~= "" then
+        -- Remove trailing newline and append default paths
+        result = result:gsub("[\n\r]", "") .. ";;"
+        package.path = result .. package.path
+      end
+    end
+  end
+
+  if not vim.env.LUA_CPATH or vim.env.LUA_CPATH == "" then
+    local handle = io.popen("luarocks path --lr-cpath 2>/dev/null")
+    if handle then
+      local result = handle:read("*a")
+      handle:close()
+      if result and result ~= "" then
+        -- Remove trailing newline and append default paths
+        result = result:gsub("[\n\r]", "") .. ";;"
+        package.cpath = result .. package.cpath
+      end
+    end
+  end
+end
+
+-- Setup paths and load luacov for coverage tracking
+setup_luacov_paths()
+
+-- Load luacov before any other code
+local has_luacov, luacov = pcall(require, "luacov")
+if has_luacov then
+  vim.notify("LuaCov loaded for coverage tracking", vim.log.levels.DEBUG)
+
+  -- Ensure stats are flushed on exit
+  vim.api.nvim_create_autocmd("VimLeavePre", {
+    callback = function()
+      local runner = require("luacov.runner")
+      if runner and runner.save_stats then
+        runner.save_stats()
+      end
+    end,
+  })
+else
+  vim.notify("LuaCov not available (install with: luarocks install luacov)", vim.log.levels.DEBUG)
+end
 
 -- Set up isolated test environment
 vim.env.LAZY_STDPATH = ".tests"
