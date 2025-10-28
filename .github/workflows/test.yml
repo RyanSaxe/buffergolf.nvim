@@ -38,20 +38,18 @@ jobs:
       - name: Install Neovim (Linux)
         if: runner.os == 'Linux'
         run: |
+          mkdir -p ${{ runner.temp }}/nvim
           if [ "${{ matrix.neovim_version }}" = "stable" ]; then
             echo "Installing stable Neovim..."
-            # Get the latest release URL dynamically to avoid redirect issues
-            NVIM_URL=$(curl -s https://api.github.com/repos/neovim/neovim/releases/latest \
-              | grep "browser_download_url.*nvim-linux64.tar.gz" \
-              | cut -d '"' -f 4)
-            echo "Downloading from: $NVIM_URL"
-            curl -L -o nvim-linux64.tar.gz "$NVIM_URL"
+            wget -q https://github.com/neovim/neovim/releases/download/stable/nvim.appimage -O ${{ runner.temp }}/nvim/nvim.appimage
           else
             echo "Installing nightly Neovim..."
-            curl -L -o nvim-linux64.tar.gz https://github.com/neovim/neovim/releases/download/nightly/nvim-linux64.tar.gz
+            wget -q https://github.com/neovim/neovim/releases/download/nightly/nvim.appimage -O ${{ runner.temp }}/nvim/nvim.appimage
           fi
-          tar xzf nvim-linux64.tar.gz
-          echo "$PWD/nvim-linux64/bin" >> $GITHUB_PATH
+          cd ${{ runner.temp }}/nvim
+          chmod a+x ./nvim.appimage
+          ./nvim.appimage --appimage-extract
+          echo "${{ runner.temp }}/nvim/squashfs-root/usr/bin" >> $GITHUB_PATH
 
       # macOS Neovim installation
       - name: Install Neovim (macOS)
