@@ -1,0 +1,19 @@
+# Test artifacts
+.tests/
+luacov.*
+luacov-*
+
+# Neovim
+*.swp
+*.swo
+*~
+.netrwhist
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.sublime-*

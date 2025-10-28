@@ -1,0 +1,127 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, rewrite]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test on ${{ matrix.os }} with Neovim ${{ matrix.neovim_version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux testing with multiple Neovim versions
+          - os: ubuntu-latest
+            neovim_version: stable
+            coverage: true
+          - os: ubuntu-latest
+            neovim_version: nightly
+            coverage: false
+          # macOS testing
+          - os: macos-latest
+            neovim_version: stable
+            coverage: false
+          # Windows testing
+          - os: windows-latest
+            neovim_version: stable
+            coverage: false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Linux Neovim installation
+      - name: Install Neovim (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          if [ "${{ matrix.neovim_version }}" = "stable" ]; then
+            echo "Installing stable Neovim..."
+            curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux64.tar.gz
+          else
+            echo "Installing nightly Neovim..."
+            curl -LO https://github.com/neovim/neovim/releases/download/nightly/nvim-linux64.tar.gz
+          fi
+          tar xzf nvim-linux64.tar.gz
+          echo "$PWD/nvim-linux64/bin" >> $GITHUB_PATH
+
+      # macOS Neovim installation
+      - name: Install Neovim (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install neovim
+
+      # Windows Neovim installation
+      - name: Install Neovim (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          choco install neovim -y
+          echo "C:\tools\neovim\nvim-win64\bin" >> $env:GITHUB_PATH
+
+      - name: Verify Neovim installation
+        shell: bash
+        run: |
+          nvim --version
+
+      # Install luacov for coverage (Linux only for now)
+      - name: Install coverage tools
+        if: matrix.coverage
+        run: |
+          # Install luarocks
+          sudo apt-get update
+          sudo apt-get install -y luarocks
+          # Install luacov
+          sudo luarocks install luacov
+
+      - name: Cache test dependencies
+        uses: actions/cache@v4
+        with:
+          path: .tests
+          key: ${{ runner.os }}-tests-${{ matrix.neovim_version }}-${{ hashFiles('tests/minit.lua', 'scripts/test') }}
+          restore-keys: |
+            ${{ runner.os }}-tests-${{ matrix.neovim_version }}-
+            ${{ runner.os }}-tests-
+
+      - name: Run tests (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          chmod +x scripts/test
+          if [ "${{ matrix.coverage }}" = "true" ]; then
+            ./scripts/test --coverage
+          else
+            ./scripts/test
+          fi
+
+      - name: Run tests (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          scripts\test.bat
+
+      # Upload coverage report as artifact
+      - name: Upload coverage report
+        if: matrix.coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: luacov.report.out
+          retention-days: 7
+
+      # Display test summary in PR
+      - name: Test Summary
+        if: always()
+        shell: bash
+        run: |
+          echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "- OS: ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Neovim: ${{ matrix.neovim_version }}" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ matrix.coverage }}" = "true" ] && [ -f luacov.report.out ]; then
+            echo "### Coverage Summary" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -20 luacov.report.out >> $GITHUB_STEP_SUMMARY || echo "Coverage report not available" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
