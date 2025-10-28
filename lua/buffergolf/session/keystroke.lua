@@ -1,7 +1,6 @@
 local M = {}
 
 local active_sessions = {}
-local command_depth, depth_reset_timer = 0, nil
 
 function M.init_session(session)
   if not session or not session.practice_buf then
@@ -13,6 +12,8 @@ function M.init_session(session)
     count = 0,
     tracking_enabled = true,
     session = session,
+    command_depth = 0,
+    depth_reset_timer = nil,
   }
 
   local ns = vim.api.nvim_create_namespace(("BuffergolfKeystroke_%d"):format(practice_buf))
@@ -34,7 +35,7 @@ function M.init_session(session)
       return
     end
 
-    if command_depth == 0 then
+    if state.command_depth == 0 then
       if state.tracking_enabled then
         state.count = state.count + 1
         if state.session and state.session.on_keystroke then
@@ -42,12 +43,15 @@ function M.init_session(session)
         end
       end
 
-      command_depth = 1
-      if depth_reset_timer then
-        vim.fn.timer_stop(depth_reset_timer)
+      state.command_depth = 1
+      if state.depth_reset_timer then
+        vim.fn.timer_stop(state.depth_reset_timer)
       end
-      depth_reset_timer = vim.defer_fn(function()
-        command_depth, depth_reset_timer = 0, nil
+      state.depth_reset_timer = vim.defer_fn(function()
+        if active_sessions[practice_buf] then
+          active_sessions[practice_buf].command_depth = 0
+          active_sessions[practice_buf].depth_reset_timer = nil
+        end
       end, 50)
     end
   end, ns)
@@ -58,12 +62,13 @@ function M.cleanup_session(session)
     return
   end
 
-  if depth_reset_timer then
-    vim.fn.timer_stop(depth_reset_timer)
-    depth_reset_timer = nil
+  local state = active_sessions[session.practice_buf]
+  if state and state.depth_reset_timer then
+    -- Don't try to stop defer_fn timers - they're not stoppable with timer_stop
+    -- The timer callback checks if the session still exists, so it's safe
+    state.depth_reset_timer = nil
   end
 
-  command_depth = 0
   active_sessions[session.practice_buf] = nil
 
   if session.ns_keystroke then

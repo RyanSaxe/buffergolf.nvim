@@ -70,6 +70,14 @@ local function complete_session(session, reason)
   keystroke.set_tracking_enabled(session, false)
 
   if buffer.buf_valid(session.practice_buf) then
+    -- Exit insert mode if we're in the practice buffer
+    if vim.api.nvim_get_current_buf() == session.practice_buf then
+      local mode = vim.fn.mode()
+      if mode == "i" or mode == "v" or mode == "V" or mode == "\22" then
+        pcall(vim.cmd.stopinsert)
+      end
+    end
+
     pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = session.practice_buf })
     pcall(vim.api.nvim_set_option_value, "readonly", true, { buf = session.practice_buf })
     pcall(vim.api.nvim_set_option_value, "modified", false, { buf = session.practice_buf })

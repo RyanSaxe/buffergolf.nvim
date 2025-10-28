@@ -29,9 +29,8 @@ local function expand_tabs(text, actual, bufnr)
   if not text:find("\t") then
     return text
   end
-  local tabstop = pcall(vim.api.nvim_get_option_value, "tabstop", { buf = bufnr })
-      and vim.api.nvim_get_option_value("tabstop", { buf = bufnr })
-    or 8
+  local ok, tabstop = pcall(vim.api.nvim_get_option_value, "tabstop", { buf = bufnr })
+  tabstop = ok and tabstop or 8
   local display_col = actual and vim.fn.strdisplaywidth(actual) or 0
   local pieces = {}
   for ch in text:gmatch("[%z\1-\127\194-\244][\128-\191]*") do

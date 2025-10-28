@@ -59,10 +59,8 @@ function M.setup(session)
     {
       { "BufWipeout", "BufDelete" },
       function()
-        if not vim.api.nvim_buf_is_valid(session.practice_buf) then
-          local lifecycle = require("buffergolf.session.lifecycle")
-          lifecycle.clear_state(session)
-        end
+        local lifecycle = require("buffergolf.session.lifecycle")
+        lifecycle.clear_state(session)
       end,
     },
   }

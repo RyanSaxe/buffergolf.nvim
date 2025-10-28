@@ -11,11 +11,17 @@ local visual = require("buffergolf.session.visual")
 local M = {}
 
 function M.clear_state(session)
-  timer.cleanup(session)
-  keystroke.cleanup_session(session)
+  -- Ensure all cleanup steps run even if one fails
+  pcall(timer.cleanup, session)
+  pcall(keystroke.cleanup_session, session)
   storage.clear(session)
   if session.change_attached and buffer.buf_valid(session.practice_buf) then
-    pcall(vim.api.nvim_buf_detach, session.practice_buf)
+    -- Extra safety: double-check buffer is still valid before detaching
+    -- (it might have become invalid between the check and the detach call)
+    local ok, is_valid = pcall(vim.api.nvim_buf_is_valid, session.practice_buf)
+    if ok and is_valid then
+      pcall(vim.api.nvim_buf_detach, session.practice_buf)
+    end
   end
   session.change_attached, session.refreshing, session.refresh_scheduled = nil, nil, nil
   if session.augroup then
@@ -193,14 +199,14 @@ function M.stop(bufnr)
   end
 
   if buffer.win_valid(session.origin_win) and buffer.buf_valid(session.origin_buf) then
-    vim.api.nvim_set_current_win(session.origin_win)
-    vim.api.nvim_win_set_buf(session.origin_win, session.origin_buf)
+    pcall(vim.api.nvim_set_current_win, session.origin_win)
+    pcall(vim.api.nvim_win_set_buf, session.origin_win, session.origin_buf)
   elseif buffer.buf_valid(session.origin_buf) then
-    vim.api.nvim_set_current_buf(session.origin_buf)
+    pcall(vim.api.nvim_set_current_buf, session.origin_buf)
   end
 
   if buffer.buf_valid(session.practice_buf) then
-    vim.api.nvim_buf_delete(session.practice_buf, { force = true })
+    pcall(vim.api.nvim_buf_delete, session.practice_buf, { force = true })
   end
 
   M.clear_state(session)
