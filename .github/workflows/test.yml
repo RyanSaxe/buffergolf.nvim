@@ -69,14 +69,17 @@ jobs:
         run: |
           nvim --version
 
-      # Install luacov for coverage (Linux only for now)
+      # Install luarocks for Linux (required for luassert in tests)
+      - name: Install luarocks (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y luarocks
+
+      # Install luacov for coverage
       - name: Install coverage tools
         if: matrix.coverage
         run: |
-          # Install luarocks
-          sudo apt-get update
-          sudo apt-get install -y luarocks
-          # Install luacov
           sudo luarocks install luacov
 
       - name: Cache test dependencies
