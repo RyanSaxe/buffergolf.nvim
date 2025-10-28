@@ -10,8 +10,22 @@ rm -f luacov.stats.out luacov.report.out
 nvim -l tests/minit.lua --minitest
 EXIT_CODE=$?
 
-# Show coverage report if requested and tests passed
+# Generate and show coverage report if requested and tests passed
 if [[ "$1" == "--coverage" ]] && [ $EXIT_CODE -eq 0 ]; then
+  echo ""
+  echo "Generating coverage report..."
+
+  # Check if stats file was generated
+  if [ -f luacov.stats.out ]; then
+    # Run luacov to generate the report from stats
+    if command -v luacov &> /dev/null; then
+      luacov
+    else
+      echo "Warning: luacov command not found. Trying with lua..."
+      lua -lluacov.runner -e "require('luacov.runner').load_config(); require('luacov.reporter').report()"
+    fi
+  fi
+
   echo ""
   echo "Coverage Report:"
   echo "================"
@@ -20,8 +34,13 @@ if [[ "$1" == "--coverage" ]] && [ $EXIT_CODE -eq 0 ]; then
     # Show summary from the report
     tail -20 luacov.report.out
   else
-    echo "No coverage report generated. You may need to install luacov."
-    echo "Install with: luarocks install luacov"
+    echo "No coverage report generated."
+    if [ ! -f luacov.stats.out ]; then
+      echo "Stats file not found. Luacov may not be installed or loaded."
+      echo "Install with: luarocks install luacov"
+    else
+      echo "Stats file exists but report generation failed."
+    fi
   fi
 fi
 

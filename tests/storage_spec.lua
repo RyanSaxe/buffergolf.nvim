@@ -28,7 +28,7 @@ describe("session storage", function()
     it("stores and retrieves session by origin buffer", function()
       Storage.store(session1)
 
-      local retrieved = Storage.get(1) -- origin buffer
+      local retrieved = Storage.get(1)
       assert.equal(session1, retrieved)
       assert.equal("typing", retrieved.mode)
     end)
@@ -36,28 +36,20 @@ describe("session storage", function()
     it("stores and retrieves session by practice buffer", function()
       Storage.store(session1)
 
-      local retrieved = Storage.get(2) -- practice buffer
+      local retrieved = Storage.get(2)
       assert.equal(session1, retrieved)
       assert.equal("typing", retrieved.mode)
-    end)
-
-    it("returns nil for non-existent buffer", function()
-      Storage.store(session1)
-
-      assert.is_nil(Storage.get(999))
     end)
 
     it("handles multiple sessions without interference", function()
       Storage.store(session1)
       Storage.store(session2)
 
-      -- Each session should be retrievable independently
       assert.equal(session1, Storage.get(1))
       assert.equal(session1, Storage.get(2))
       assert.equal(session2, Storage.get(3))
       assert.equal(session2, Storage.get(4))
 
-      -- Verify they're different sessions
       assert.not_equal(Storage.get(1), Storage.get(3))
     end)
   end)
@@ -66,8 +58,8 @@ describe("session storage", function()
     it("returns true for stored session buffers", function()
       Storage.store(session1)
 
-      assert.is_true(Storage.is_active(1)) -- origin
-      assert.is_true(Storage.is_active(2)) -- practice
+      assert.is_true(Storage.is_active(1))
+      assert.is_true(Storage.is_active(2))
     end)
 
     it("returns false for non-existent buffers", function()
@@ -92,11 +84,9 @@ describe("session storage", function()
 
       Storage.clear(session1)
 
-      -- session1 should be cleared
       assert.is_nil(Storage.get(1))
       assert.is_nil(Storage.get(2))
 
-      -- session2 should remain
       assert.equal(session2, Storage.get(3))
       assert.equal(session2, Storage.get(4))
     end)
@@ -107,13 +97,16 @@ describe("session storage", function()
       Storage.store(session1)
 
       assert.equal(session1, Storage.by_practice(2))
-      assert.is_nil(Storage.by_practice(1)) -- origin buffer shouldn't work here
+      assert.is_nil(Storage.by_practice(1))
+      assert.is_nil(Storage.by_practice(999))
     end)
+  end)
 
-    it("returns nil for non-practice buffers", function()
+  describe("nil/non-existent handling", function()
+    it("returns nil for non-existent buffers", function()
       Storage.store(session1)
 
-      assert.is_nil(Storage.by_practice(999))
+      assert.is_nil(Storage.get(999))
     end)
   end)
 end)

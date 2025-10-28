@@ -1,54 +1,53 @@
 local assert = require("luassert")
 local mock = require("luassert.mock")
 
+local function setup_lifecycle_mocks()
+  local m = {}
+  m.storage = mock(require("buffergolf.session.storage"), true)
+  m.keystroke = mock(require("buffergolf.session.keystroke"), true)
+  m.timer = mock(require("buffergolf.timer.control"), true)
+  m.visual = mock(require("buffergolf.session.visual"), true)
+  m.autocmds = mock(require("buffergolf.session.autocmds"), true)
+  m.buffer = mock(require("buffergolf.session.buffer"), true)
+  m.config = mock(require("buffergolf.config"), true)
+
+  m.config.get.returns({
+    disabled_plugins = "auto",
+    auto_dedent = false,
+    keymaps = { golf = {} },
+  })
+
+  m.buffer.buf_valid.returns(true)
+  m.buffer.win_valid.returns(true)
+  m.buffer.generate_buffer_name.returns("test.practice.lua")
+  m.buffer.prepare_lines.returns({ "test line" })
+  m.buffer.normalize_lines = function(lines, _)
+    return lines or {}
+  end
+
+  return m
+end
+
 describe("session lifecycle", function()
   local lifecycle
   local mocks = {}
 
   before_each(function()
-    -- Mock ALL dependencies to isolate lifecycle logic
-    mocks.storage = mock(require("buffergolf.session.storage"), true)
-    mocks.keystroke = mock(require("buffergolf.session.keystroke"), true)
-    mocks.timer = mock(require("buffergolf.timer.control"), true)
-    mocks.visual = mock(require("buffergolf.session.visual"), true)
-    mocks.autocmds = mock(require("buffergolf.session.autocmds"), true)
-    mocks.buffer = mock(require("buffergolf.session.buffer"), true)
-    mocks.config = mock(require("buffergolf.config"), true)
+    mocks = setup_lifecycle_mocks()
 
-    -- Mock defer_fn to execute immediately for testing
     vim.defer_fn = function(fn, _)
       fn()
     end
 
-    -- Set up minimal config mock response
-    mocks.config.get.returns({
-      disabled_plugins = "auto",
-      auto_dedent = false,
-      keymaps = { golf = {} },
-    })
-
-    -- Set up buffer mock responses
-    mocks.buffer.buf_valid.returns(true)
-    mocks.buffer.win_valid.returns(true)
-    mocks.buffer.generate_buffer_name.returns("test.practice.lua")
-    mocks.buffer.prepare_lines.returns({ "test line" })
-    -- normalize_lines is crucial - it processes the reference lines
-    mocks.buffer.normalize_lines = function(lines, _)
-      return lines or {}
-    end
-
-    -- Load lifecycle after mocks are set up
     package.loaded["buffergolf.session.lifecycle"] = nil
     lifecycle = require("buffergolf.session.lifecycle")
   end)
 
   after_each(function()
-    -- Restore all mocks
     for _, m in pairs(mocks) do
       mock.revert(m)
     end
 
-    -- Clean up package cache
     package.loaded["buffergolf.session.lifecycle"] = nil
   end)
 
@@ -65,12 +64,10 @@ describe("session lifecycle", function()
 
       lifecycle.clear_state(session)
 
-      -- Verify cleanup functions were called
       assert.stub(mocks.timer.cleanup).was_called()
       assert.stub(mocks.keystroke.cleanup_session).was_called()
       assert.stub(mocks.storage.clear).was_called()
 
-      -- Verify state was cleared
       assert.is_nil(session.change_attached)
       assert.is_nil(session.refreshing)
       assert.is_nil(session.refresh_scheduled)
@@ -83,17 +80,14 @@ describe("session lifecycle", function()
         mode = "typing",
       }
 
-      -- Make timer.cleanup throw an error
       mocks.timer.cleanup.invokes(function()
         error("cleanup failed")
       end)
 
-      -- Should not throw, other cleanup should still happen
       assert.has_no_errors(function()
         lifecycle.clear_state(session)
       end)
 
-      -- Other cleanup should still be called
       assert.stub(mocks.keystroke.cleanup_session).was_called()
       assert.stub(mocks.storage.clear).was_called()
     end)
@@ -108,10 +102,8 @@ describe("session lifecycle", function()
         mode = "typing",
       }
 
-      -- Mock storage to return our session
       mocks.storage.get.returns(session)
 
-      -- Create mock windows/buffers
       local current_win = 1000
       vim.api.nvim_get_current_win = function()
         return current_win
@@ -128,9 +120,8 @@ describe("session lifecycle", function()
       vim.api.nvim_set_current_win = function() end
       vim.api.nvim_buf_delete = function() end
 
-      lifecycle.stop(1) -- Stop by origin buffer
+      lifecycle.stop(1)
 
-      -- Verify session was retrieved and cleared
       assert.stub(mocks.storage.get).was_called_with(1)
       assert.stub(mocks.timer.cleanup).was_called()
       assert.stub(mocks.keystroke.cleanup_session).was_called()
@@ -144,26 +135,22 @@ describe("session lifecycle", function()
 
       assert.is_nil(result)
       assert.stub(mocks.storage.get).was_called_with(999)
-      -- Cleanup functions should not be called
       assert.stub(mocks.timer.cleanup).was_not_called()
     end)
   end)
 
   describe("basic start flow", function()
-    it("creates a typing session with minimal setup", function()
+    it("creates a typing session", function()
       local origin_buf = vim.api.nvim_create_buf(true, false)
       local practice_buf = vim.api.nvim_create_buf(true, false)
 
-      -- Mock that no session exists yet
       mocks.storage.is_active.returns(false)
 
-      -- Mock buffer creation
       local orig_create_buf = vim.api.nvim_create_buf
       vim.api.nvim_create_buf = function()
         return practice_buf
       end
 
-      -- Mock window functions
       vim.api.nvim_get_current_win = function()
         return 1000
       end
@@ -192,26 +179,19 @@ describe("session lifecycle", function()
       end
       vim.cmd = function() end
 
-      -- Mock copy_indent_options
       mocks.buffer.copy_indent_options = function() end
 
       local test_config = { auto_dedent = false }
       local target_lines = { "hello", "world" }
 
-      -- The start function doesn't return anything, it just creates the session
       lifecycle.start(origin_buf, test_config, target_lines)
 
-      -- Verify key components were initialized
       assert.stub(mocks.storage.store).was_called()
       assert.stub(mocks.keystroke.init_session).was_called()
       assert.stub(mocks.timer.init).was_called()
       assert.stub(mocks.visual.refresh).was_called()
       assert.stub(mocks.autocmds.setup).was_called()
 
-      -- Verify a session was stored
-      assert.stub(mocks.storage.store).was_called(1)
-
-      -- Get the session that was stored to verify its properties
       local stored_call = mocks.storage.store.calls[1]
       if stored_call then
         local stored_session = stored_call.vals[1]
@@ -221,7 +201,6 @@ describe("session lifecycle", function()
         assert.same({ "hello", "world" }, stored_session.reference_lines)
       end
 
-      -- Cleanup
       vim.api.nvim_create_buf = orig_create_buf
       if vim.api.nvim_buf_is_valid(origin_buf) then
         vim.api.nvim_buf_delete(origin_buf, { force = true })

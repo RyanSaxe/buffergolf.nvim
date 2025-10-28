@@ -1,11 +1,11 @@
 local Keystroke = require("buffergolf.session.keystroke")
 local assert = require("luassert")
+local helpers = require("tests.helpers")
 
 describe("keystroke tracking", function()
   local session
 
   before_each(function()
-    -- Create a mock session with a real buffer
     local practice_buf = vim.api.nvim_create_buf(true, false)
     session = {
       practice_buf = practice_buf,
@@ -15,33 +15,21 @@ describe("keystroke tracking", function()
   end)
 
   after_each(function()
-    -- Cleanup the session
-    if session and session.practice_buf then
+    if session then
       Keystroke.cleanup_session(session)
-      if vim.api.nvim_buf_is_valid(session.practice_buf) then
-        vim.api.nvim_buf_delete(session.practice_buf, { force = true })
-      end
+      helpers.cleanup_session(session)
     end
   end)
 
   describe("init_session", function()
-    it("initializes tracking for a session", function()
+    it("initializes with tracking enabled and count at 0", function()
       Keystroke.init_session(session)
 
-      -- Should start with count at 0
       assert.equal(0, Keystroke.get_count(session))
-
-      -- Should have tracking enabled by default
       assert.is_true(Keystroke.is_tracking_enabled(session))
     end)
 
-    it("handles nil session gracefully", function()
-      assert.has_no_errors(function()
-        Keystroke.init_session(nil)
-      end)
-    end)
-
-    it("handles session without practice_buf gracefully", function()
+    it("handles session without practice_buf", function()
       local bad_session = { origin_buf = 1 }
       assert.has_no_errors(function()
         Keystroke.init_session(bad_session)
@@ -51,45 +39,26 @@ describe("keystroke tracking", function()
   end)
 
   describe("get_count and reset_count", function()
-    it("tracks keystroke count", function()
-      Keystroke.init_session(session)
-
-      -- Manually increment count (simulating keystrokes)
-      -- We can't easily trigger vim.on_key in tests, so we'll test the API
-      assert.equal(0, Keystroke.get_count(session))
-
-      -- Reset should set count to 0
-      Keystroke.reset_count(session)
-      assert.equal(0, Keystroke.get_count(session))
-    end)
-
     it("returns 0 for uninitialized session", function()
       assert.equal(0, Keystroke.get_count(session))
     end)
 
-    it("handles nil session in get_count", function()
-      assert.equal(0, Keystroke.get_count(nil))
-    end)
-
-    it("handles nil session in reset_count", function()
-      assert.has_no_errors(function()
-        Keystroke.reset_count(nil)
-      end)
+    it("resets count to 0", function()
+      Keystroke.init_session(session)
+      Keystroke.reset_count(session)
+      assert.equal(0, Keystroke.get_count(session))
     end)
   end)
 
   describe("tracking enabled/disabled", function()
-    it("can enable and disable tracking", function()
+    it("toggles tracking state", function()
       Keystroke.init_session(session)
 
-      -- Should be enabled by default
       assert.is_true(Keystroke.is_tracking_enabled(session))
 
-      -- Disable tracking
       Keystroke.set_tracking_enabled(session, false)
       assert.is_false(Keystroke.is_tracking_enabled(session))
 
-      -- Re-enable tracking
       Keystroke.set_tracking_enabled(session, true)
       assert.is_true(Keystroke.is_tracking_enabled(session))
     end)
@@ -97,28 +66,19 @@ describe("keystroke tracking", function()
     it("returns false for uninitialized session", function()
       assert.is_false(Keystroke.is_tracking_enabled(session))
     end)
-
-    it("handles nil session in tracking functions", function()
-      assert.is_false(Keystroke.is_tracking_enabled(nil))
-
-      assert.has_no_errors(function()
-        Keystroke.set_tracking_enabled(nil, true)
-      end)
-    end)
   end)
 
   describe("with_keys_disabled", function()
-    it("temporarily disables tracking during function execution", function()
+    it("disables tracking during function execution", function()
       Keystroke.init_session(session)
-      assert.is_true(Keystroke.is_tracking_enabled(session))
 
-      local was_disabled_during_call = false
+      local disabled = false
       Keystroke.with_keys_disabled(session, function()
-        was_disabled_during_call = not Keystroke.is_tracking_enabled(session)
+        disabled = not Keystroke.is_tracking_enabled(session)
       end)
 
-      assert.is_true(was_disabled_during_call)
-      assert.is_true(Keystroke.is_tracking_enabled(session)) -- re-enabled after
+      assert.is_true(disabled)
+      assert.is_true(Keystroke.is_tracking_enabled(session))
     end)
 
     it("restores previous state after execution", function()
@@ -126,11 +86,9 @@ describe("keystroke tracking", function()
       Keystroke.set_tracking_enabled(session, false)
 
       Keystroke.with_keys_disabled(session, function()
-        -- Should still be disabled
         assert.is_false(Keystroke.is_tracking_enabled(session))
       end)
 
-      -- Should remain disabled (was disabled before)
       assert.is_false(Keystroke.is_tracking_enabled(session))
     end)
 
@@ -145,8 +103,6 @@ describe("keystroke tracking", function()
 
       assert.is_false(success)
       assert.matches("test error", err)
-
-      -- Should still restore tracking state
       assert.is_true(Keystroke.is_tracking_enabled(session))
     end)
 
@@ -159,35 +115,16 @@ describe("keystroke tracking", function()
 
       assert.equal("test value", result)
     end)
-
-    it("handles nil session", function()
-      local called = false
-      local result = Keystroke.with_keys_disabled(nil, function()
-        called = true
-        return "success"
-      end)
-
-      assert.is_true(called)
-      assert.equal("success", result)
-    end)
   end)
 
   describe("cleanup_session", function()
     it("cleans up session state", function()
       Keystroke.init_session(session)
-      assert.equal(0, Keystroke.get_count(session))
 
       Keystroke.cleanup_session(session)
 
-      -- After cleanup, should return 0 (no state)
       assert.equal(0, Keystroke.get_count(session))
       assert.is_false(Keystroke.is_tracking_enabled(session))
-    end)
-
-    it("handles nil session gracefully", function()
-      assert.has_no_errors(function()
-        Keystroke.cleanup_session(nil)
-      end)
     end)
 
     it("handles session without practice_buf", function()
@@ -195,6 +132,25 @@ describe("keystroke tracking", function()
       assert.has_no_errors(function()
         Keystroke.cleanup_session(bad_session)
       end)
+    end)
+  end)
+
+  describe("nil handling", function()
+    it("handles nil safely", function()
+      assert.has_no_errors(function()
+        Keystroke.init_session(nil)
+        Keystroke.reset_count(nil)
+        Keystroke.set_tracking_enabled(nil, true)
+        Keystroke.cleanup_session(nil)
+      end)
+
+      assert.equal(0, Keystroke.get_count(nil))
+      assert.is_false(Keystroke.is_tracking_enabled(nil))
+
+      local result = Keystroke.with_keys_disabled(nil, function()
+        return "success"
+      end)
+      assert.equal("success", result)
     end)
   end)
 end)

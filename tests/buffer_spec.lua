@@ -19,7 +19,7 @@ describe("buffer utilities", function()
 
     it("handles lines with no indent", function()
       local input = { "no indent", "  indented" }
-      assert.same(input, Buffer.dedent_lines(input)) -- no common indent, returns as-is
+      assert.same(input, Buffer.dedent_lines(input))
     end)
 
     it("preserves empty and whitespace-only lines", function()
@@ -32,7 +32,7 @@ describe("buffer utilities", function()
       local expected = {
         "code",
         "",
-        "    ", -- whitespace-only lines are preserved as-is
+        "    ",
         "more",
       }
       assert.same(expected, Buffer.dedent_lines(input))
@@ -66,39 +66,28 @@ describe("buffer utilities", function()
   end)
 
   describe("prepare_lines", function()
-    it("applies dedent when auto_dedent is true", function()
-      local config = { auto_dedent = true }
-      local input = { "  indented", "    more" }
-      local expected = { "indented", "  more" }
+    local cases = {
+      { auto_dedent = true, input = { "  indented", "    more" }, expected = { "indented", "  more" } },
+      { auto_dedent = false, input = { "  indented", "    more" }, expected = { "  indented", "    more" } },
+      { auto_dedent = nil, input = { "  indented" }, expected = { "  indented" } },
+    }
 
-      assert.same(expected, Buffer.prepare_lines(input, nil, config))
-    end)
-
-    it("skips dedent when auto_dedent is false", function()
-      local config = { auto_dedent = false }
-      local input = { "  indented", "    more" }
-
-      assert.same(input, Buffer.prepare_lines(input, nil, config))
-    end)
-
-    it("skips dedent when auto_dedent not specified", function()
-      local config = {}
-      local input = { "  indented" }
-
-      assert.same(input, Buffer.prepare_lines(input, nil, config))
-    end)
+    for _, case in ipairs(cases) do
+      it(string.format("dedents when auto_dedent=%s", case.auto_dedent), function()
+        local config = { auto_dedent = case.auto_dedent }
+        assert.same(case.expected, Buffer.prepare_lines(case.input, nil, config))
+      end)
+    end
   end)
 
   describe("generate_buffer_name", function()
     it("generates name for unnamed buffer with filetype", function()
-      -- Create a mock buffer
       local buf = vim.api.nvim_create_buf(true, false)
       vim.api.nvim_set_option_value("filetype", "lua", { buf = buf })
 
       local name = Buffer.generate_buffer_name(buf, "_practice")
       assert.matches("unnamed_practice%.lua", name)
 
-      -- Cleanup
       vim.api.nvim_buf_delete(buf, { force = true })
     end)
 
@@ -108,20 +97,16 @@ describe("buffer utilities", function()
       local name = Buffer.generate_buffer_name(buf, "_practice")
       assert.matches("unnamed_practice%.txt", name)
 
-      -- Cleanup
       vim.api.nvim_buf_delete(buf, { force = true })
     end)
 
     it("generates name for named buffer", function()
       local buf = vim.api.nvim_create_buf(true, false)
-      -- Set a buffer name
       vim.api.nvim_buf_set_name(buf, "/tmp/test.lua")
 
       local name = Buffer.generate_buffer_name(buf, ".practice")
-      -- On macOS, /tmp is a symlink to /private/tmp
       assert.matches("test%.practice%.lua$", name)
 
-      -- Cleanup
       vim.api.nvim_buf_delete(buf, { force = true })
     end)
   end)
