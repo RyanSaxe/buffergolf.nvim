@@ -40,10 +40,15 @@ jobs:
         run: |
           if [ "${{ matrix.neovim_version }}" = "stable" ]; then
             echo "Installing stable Neovim..."
-            curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux64.tar.gz
+            # Get the latest release URL dynamically to avoid redirect issues
+            NVIM_URL=$(curl -s https://api.github.com/repos/neovim/neovim/releases/latest \
+              | grep "browser_download_url.*nvim-linux64.tar.gz" \
+              | cut -d '"' -f 4)
+            echo "Downloading from: $NVIM_URL"
+            curl -L -o nvim-linux64.tar.gz "$NVIM_URL"
           else
             echo "Installing nightly Neovim..."
-            curl -LO https://github.com/neovim/neovim/releases/download/nightly/nvim-linux64.tar.gz
+            curl -L -o nvim-linux64.tar.gz https://github.com/neovim/neovim/releases/download/nightly/nvim-linux64.tar.gz
           fi
           tar xzf nvim-linux64.tar.gz
           echo "$PWD/nvim-linux64/bin" >> $GITHUB_PATH
