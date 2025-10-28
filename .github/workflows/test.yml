@@ -81,6 +81,9 @@ jobs:
         if: matrix.coverage
         run: |
           sudo luarocks install luacov
+          # Export luarocks paths so Neovim can find luacov
+          echo "LUA_PATH=$(luarocks path --lr-path);;" >> $GITHUB_ENV
+          echo "LUA_CPATH=$(luarocks path --lr-cpath);;" >> $GITHUB_ENV
 
       - name: Cache test dependencies
         uses: actions/cache@v4

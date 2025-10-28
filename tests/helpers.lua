@@ -123,6 +123,19 @@ function M.create_mock_session(mode, config)
   return session
 end
 
+-- Cleanup a session's buffers
+function M.cleanup_session(session)
+  if not session then
+    return
+  end
+  if session.practice_buf and vim.api.nvim_buf_is_valid(session.practice_buf) then
+    pcall(vim.api.nvim_buf_delete, session.practice_buf, { force = true })
+  end
+  if session.reference_buf and vim.api.nvim_buf_is_valid(session.reference_buf) then
+    pcall(vim.api.nvim_buf_delete, session.reference_buf, { force = true })
+  end
+end
+
 -- Cleanup any leftover test state
 function M.cleanup()
   -- Close all windows except current
