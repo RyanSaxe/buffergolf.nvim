@@ -63,7 +63,7 @@ describe("stats aggregate", function()
 
     it("calculates WPM", function()
       local stats = Aggregate.get_stats(session)
-      assert.is_near(2.2, stats.wpm, 0.1)
+      assert.equal(2, stats.wpm)
     end)
 
     it("uses frozen keystroke count when available", function()
@@ -88,7 +88,7 @@ describe("stats aggregate", function()
     end)
 
     it("handles zero elapsed time", function()
-      session.timer_state.elapsed = 0
+      session.timer_state.start_time = vim.uv.hrtime()
 
       local stats = Aggregate.get_stats(session)
 
