@@ -192,8 +192,8 @@ function M.init(session)
   end
   session.timer_state.update_timer = timer
   timer:start(
-    250,
-    250,
+    250, -- initial delay in milliseconds
+    250, -- repeat interval in milliseconds
     vim.schedule_wrap(function()
       if
         not session.timer_state

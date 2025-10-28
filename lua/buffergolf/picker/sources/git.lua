@@ -92,7 +92,6 @@ function M.select(origin_buf, target_lines, config, start_golf_fn)
 end
 
 function M.is_available()
-  local cwd = vim.fn.getcwd()
   vim.fn.system({ "git", "rev-parse", "--is-inside-work-tree" })
   return vim.v.shell_error == 0
 end

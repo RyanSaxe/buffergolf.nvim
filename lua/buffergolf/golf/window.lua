@@ -93,7 +93,7 @@ function M.setup_mini_diff(session)
         end
       end
     end
-  end, 100)
+  end, 100) -- milliseconds delay for overlay setup
 
   session.minidiff_enabled = true
   session.update_mini_diff = function()

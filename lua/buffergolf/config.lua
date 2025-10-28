@@ -15,8 +15,8 @@ local defaults = {
     golf = { next_hunk = "]h", prev_hunk = "[h", first_hunk = "[H", last_hunk = "]H" },
   },
   windows = {
-    reference = { position = "right", size = 50 },
-    stats = { position = "top", height = 3 },
+    reference = { position = "right", size = 50 }, -- size in percentage of screen width
+    stats = { position = "top", height = 3 }, -- height in number of lines
   },
 }
 

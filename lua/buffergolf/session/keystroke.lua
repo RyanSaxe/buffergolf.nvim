@@ -45,14 +45,16 @@ function M.init_session(session)
 
       state.command_depth = 1
       if state.depth_reset_timer then
-        vim.fn.timer_stop(state.depth_reset_timer)
+        -- Don't try to stop defer_fn timers - they're not stoppable with timer_stop
+        -- The timer callback checks if the session still exists, so it's safe
+        state.depth_reset_timer = nil
       end
       state.depth_reset_timer = vim.defer_fn(function()
         if active_sessions[practice_buf] then
           active_sessions[practice_buf].command_depth = 0
           active_sessions[practice_buf].depth_reset_timer = nil
         end
-      end, 50)
+      end, 50) -- milliseconds to wait before resetting command depth
     end
   end, ns)
 end

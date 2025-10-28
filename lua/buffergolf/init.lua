@@ -239,6 +239,7 @@ function M.get_session_stats(bufnr)
   end
 
   -- Build stats table
+  -- Lazy require to avoid circular dependency
   local metrics = require("buffergolf.stats.metrics")
 
   local time_str

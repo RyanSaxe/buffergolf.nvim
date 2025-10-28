@@ -84,7 +84,7 @@ local function create_session(origin_buf, practice_buf, reference, config, mode,
     config = config or {},
     ns_ghost = vim.api.nvim_create_namespace("BuffergolfGhostNS"),
     ns_mismatch = vim.api.nvim_create_namespace("BuffergolfMismatchNS"),
-    prio_ghost = 200,
+    prio_ghost = 200, -- extmark priority for ghost text (higher than most plugins)
     ghost_marks = {},
     mode = mode,
     on_keystroke = nil,
@@ -137,11 +137,12 @@ function M.start(origin_bufnr, config, target_lines)
   visual.refresh(session)
   vim.defer_fn(function()
     if session and buffer.buf_valid(session.practice_buf) then
+      -- Lazy require to avoid circular dependency
       local par = require("buffergolf.stats.par")
       session.par = par.calculate_par(session)
       visual.refresh(session)
     end
-  end, 50)
+  end, 50) -- milliseconds delay for par calculation
 end
 
 function M.start_golf(origin_bufnr, start_lines, target_lines, config)
@@ -178,11 +179,12 @@ function M.start_golf(origin_bufnr, start_lines, target_lines, config)
   visual.refresh(session)
   vim.defer_fn(function()
     if session and buffer.buf_valid(session.practice_buf) then
+      -- Lazy require to avoid circular dependency
       local par = require("buffergolf.stats.par")
       session.par = par.calculate_par(session)
       visual.refresh(session)
     end
-  end, 150)
+  end, 150) -- milliseconds delay for golf mode initialization
 end
 
 function M.stop(bufnr)

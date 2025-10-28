@@ -11,6 +11,7 @@ function M.schedule_refresh(session)
   session.refresh_scheduled = true
   vim.schedule(function()
     session.refresh_scheduled = nil
+    -- Lazy require to avoid circular dependency
     local storage = require("buffergolf.session.storage")
     if
       not session
@@ -59,6 +60,7 @@ function M.setup(session)
     {
       { "BufWipeout", "BufDelete" },
       function()
+        -- Lazy require to avoid circular dependency
         local lifecycle = require("buffergolf.session.lifecycle")
         lifecycle.clear_state(session)
       end,
@@ -77,6 +79,7 @@ end
 function M.setup_change_watcher(session)
   visual.attach_change_watcher(session, {
     is_session_active = function(buf, target)
+      -- Lazy require to avoid circular dependency
       local storage = require("buffergolf.session.storage")
       return storage.by_practice(buf) == target
     end,

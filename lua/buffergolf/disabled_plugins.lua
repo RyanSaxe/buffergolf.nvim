@@ -74,7 +74,7 @@ M.registry = {
     detect = function()
       return pcall(require, "cmp")
     end,
-    disable = function(ctx)
+    disable = function(_)
       local ok, cmp = pcall(require, "cmp")
       if ok then
         cmp.setup.buffer({ enabled = false })
