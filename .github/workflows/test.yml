@@ -1,0 +1,138 @@
+name: Tests
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test on ${{ matrix.os }} with Neovim ${{ matrix.neovim_version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        neovim_version: [stable, nightly]
+        coverage: [false]
+        include:
+          # Run coverage on macOS stable (more reliable than Linux for this)
+          - os: macos-latest
+            neovim_version: stable
+            coverage: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Linux Neovim installation
+      - name: Install Neovim (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p ${{ runner.temp }}/nvim
+          if [ "${{ matrix.neovim_version }}" = "stable" ]; then
+            echo "Installing stable Neovim..."
+            wget -q https://github.com/neovim/neovim/releases/download/stable/nvim-linux-x86_64.appimage -O ${{ runner.temp }}/nvim/nvim.appimage
+          else
+            echo "Installing nightly Neovim..."
+            wget -q https://github.com/neovim/neovim/releases/download/nightly/nvim-linux-x86_64.appimage -O ${{ runner.temp }}/nvim/nvim.appimage
+          fi
+          cd ${{ runner.temp }}/nvim
+          chmod a+x ./nvim.appimage
+          ./nvim.appimage --appimage-extract
+          echo "${{ runner.temp }}/nvim/squashfs-root/usr/bin" >> $GITHUB_PATH
+
+      # macOS Neovim installation
+      - name: Install Neovim (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install neovim
+
+      # Windows Neovim installation
+      - name: Install Neovim (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          choco install neovim -y
+          echo "C:\tools\neovim\nvim-win64\bin" >> $env:GITHUB_PATH
+
+      - name: Verify Neovim installation
+        shell: bash
+        run: |
+          nvim --version
+
+      # Install luarocks (required for coverage tools)
+      - name: Install luarocks (Linux)
+        if: runner.os == 'Linux' && matrix.coverage
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y luarocks
+
+      - name: Install luarocks (macOS)
+        if: runner.os == 'macOS' && matrix.coverage
+        run: |
+          brew install luarocks
+
+      # Install luacov for coverage
+      - name: Install coverage tools
+        if: matrix.coverage
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo luarocks install luacov
+          else
+            luarocks --local install luacov
+          fi
+          echo "$(luarocks path --lr-bin)" >> $GITHUB_PATH
+          echo "LUA_PATH=$(luarocks path --lr-path);;" >> $GITHUB_ENV
+          echo "LUA_CPATH=$(luarocks path --lr-cpath);;" >> $GITHUB_ENV
+
+      - name: Cache test dependencies
+        uses: actions/cache@v4
+        with:
+          path: .tests
+          key: ${{ runner.os }}-tests-${{ matrix.neovim_version }}-${{ hashFiles('tests/minit.lua', 'scripts/test') }}
+          restore-keys: |
+            ${{ runner.os }}-tests-${{ matrix.neovim_version }}-
+            ${{ runner.os }}-tests-
+
+      - name: Run tests (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          chmod +x scripts/test
+          if [ "${{ matrix.coverage }}" = "true" ]; then
+            ./scripts/test --coverage
+          else
+            ./scripts/test
+          fi
+
+      - name: Run tests (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          scripts\test.bat
+
+      # Upload coverage report as artifact
+      - name: Upload coverage report
+        if: matrix.coverage && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: luacov.report.out
+          retention-days: 7
+          if-no-files-found: warn
+
+      # Display test summary in PR
+      - name: Test Summary
+        if: always()
+        shell: bash
+        run: |
+          echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "- OS: ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Neovim: ${{ matrix.neovim_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Coverage: ${{ matrix.coverage }}" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ matrix.coverage }}" = "true" ] && [ -f luacov.report.out ]; then
+            echo "### Coverage Summary" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -20 luacov.report.out >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+

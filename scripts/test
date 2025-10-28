@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+
+# Simple test runner with optional coverage reporting
+
+# Clean up old coverage files
+rm -f luacov.stats.out luacov.report.out
+
+# Run tests using mini.test via the minit.lua bootstrap
+# Coverage is always enabled if luacov is available
+nvim -l tests/minit.lua --minitest
+EXIT_CODE=$?
+
+# Generate and show coverage report if requested and tests passed
+if [[ "$1" == "--coverage" ]] && [ $EXIT_CODE -eq 0 ]; then
+  echo ""
+  echo "Generating coverage report..."
+
+  # Check if stats file was generated
+  if [ -f luacov.stats.out ]; then
+    # Run luacov to generate the report from stats
+    if command -v luacov &> /dev/null; then
+      luacov
+    else
+      # Try to find luacov through luarocks
+      LUACOV_BIN="$(luarocks path --lr-bin 2>/dev/null | cut -d: -f1)/luacov"
+      if [ -x "$LUACOV_BIN" ]; then
+        "$LUACOV_BIN"
+      else
+        # Fallback: use Lua with proper paths
+        LUA_PATH="$(luarocks path --lr-path);;" LUA_CPATH="$(luarocks path --lr-cpath);;" lua -e "require('luacov.runner').load_config(); require('luacov.reporter').report()"
+      fi
+    fi
+  fi
+
+  if [ -f luacov.report.out ]; then
+    echo ""
+    echo "Coverage Report:"
+    echo "================"
+    tail -20 luacov.report.out
+  fi
+fi
+
+exit $EXIT_CODE

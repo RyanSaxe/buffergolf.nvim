@@ -1,0 +1,29 @@
+name: StyLua
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  stylua:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install StyLua
+        run: |
+          curl -LJO https://github.com/JohnnyMorganz/StyLua/releases/latest/download/stylua-linux-x86_64.zip
+          unzip stylua-linux-x86_64.zip
+          chmod +x stylua
+          sudo mv stylua /usr/local/bin/
+
+      - name: Check Lua formatting
+        run: |
+          stylua --check .
+          if [ $? -ne 0 ]; then
+            echo "❌ Lua files are not properly formatted!"
+            echo "Run 'stylua .' locally to fix formatting issues."
+            exit 1
+          fi
+          echo "✅ All Lua files are properly formatted!"
+

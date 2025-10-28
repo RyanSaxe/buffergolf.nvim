@@ -1,111 +1,176 @@
-# Keymash.nvim
+# buffergolf.nvim
 
-Practice typing any buffer’s contents directly inside Neovim without changing the file. The text appears dim; as you type, correct characters reveal the original syntax colors and mistakes show in red.
+**A Neovim plugin for deliberate touch-typing and vim practice on actual code.**
 
-## Features
-- Overtype practice in-place: no edits to the buffer
-- Dimmed text reveals on correct keystrokes; wrong chars marked red
-- Uses your filetype’s syntax highlighting for “correct” text
-- Simple start/stop commands and safe cleanup
-- Works across colorschemes (reacts to `ColorScheme`)
+Transform any buffer into an interactive practice environment. There are two modes:
+
+1. Typing: Practice re-typing source code from scratch while seeing the reference text as ghost text. Get real-time feedback on your WPM and challenge yourself with countdown timers.
+2. Golf: Open up a vertical split to compare two pieces of text (coming from buffers, registers, files, git commits, etc.). Try and convert the practice buffer to the reference buffer with the least amount of keystrokes. The reference buffer will have a git diff overlay for convenience.
 
 ## Requirements
-- Neovim 0.9+ (API used: `nvim_set_hl`, extmarks, autocmds)
 
-## Install
+- Neovim 0.11+
+- [mini.diff](https://github.com/nvim-mini/mini.diff) (required for golf mode visualization)
+
+## Installation
+
 ### lazy.nvim
+
+#### Minimal Setup (Zero Configuration)
+
 ```lua
-{
-  "yourname/keymash.nvim",
-  config = function()
-    require("keymash").setup()
-  end,
+return {
+  {
+    "ryansaxe/buffergolf.nvim",
+    dependencies = { "nvim-mini/mini.diff" },
+  },
 }
 ```
 
-### packer.nvim
+#### Custom Setup
+
 ```lua
-use {
-  "yourname/keymash.nvim",
-  config = function()
-    require("keymash").setup()
-  end,
+return {
+  {
+    "ryansaxe/buffergolf.nvim",
+    dependencies = { "nvim-mini/mini.diff" },
+    opts = {
+      -- Default values shown, all are optional
+      disabled_plugins = "auto", -- auto-detect and disable conflicting plugins
+      auto_dedent = true, -- auto-dedent practice buffer for consistent indentation
+      keymaps = {
+        toggle = "<leader>bg",
+        countdown = "<leader>bG",
+        golf = {
+          next_hunk = "]h",
+          prev_hunk = "[h",
+          first_hunk = "[H",
+          last_hunk = "]H",
+          toggle_overlay = "<leader>do",
+        },
+      },
+      windows = {
+        reference = {
+          position = "right", -- "right", "left", "top", "bottom"
+          size = 50, -- width for left/right, height for top/bottom
+        },
+        stats = {
+          position = "top", -- "top" or "bottom"
+          height = 3,
+        },
+      },
+      -- Mode-specific overrides
+      typing_mode = {
+        disabled_plugins = {
+          matchparen = true, -- disable match parens in typing mode
+          treesitter_context = true, -- disable context in typing mode
+        },
+      },
+      golf_mode = {
+        disabled_plugins = {
+          matchparen = false, -- keep match parens in golf mode
+        },
+      },
+    },
+  },
 }
 ```
 
 ## Usage
-- `:Keymash` — toggle practice for the current buffer
-- `:KeymashStop` — stop the session if active
 
-Type in Insert mode:
-- Matching characters reveal original syntax colors
-- Mismatches show as red overlays
-- Backspace clears the last typed character and returns it to dim
+### Quick Start
+
+1. Open any file you want to practice with
+2. Run `:Buffergolf` or press `<leader>bg` (default keymap). Your target text will be your buffer, or if in visual mode, it will be your visual selection.
+3. Start typing! Your WPM and keystrokes are tracked as you type
+4. The session completes automatically when you match the reference text
+
+### Golf Mode Navigation
+
+When practicing code transformation (golf mode), use these commands:
+
+| Command | Default Keymap | Description |
+|---------|----------------|-------------|
+| `:BuffergolfNextHunk` | `]h` | Navigate to next diff |
+| `:BuffergolfPrevHunk` | `[h` | Navigate to previous diff |
+| `:BuffergolfFirstHunk` | `[H` | Navigate to first diff |
+| `:BuffergolfLastHunk` | `]H` | Navigate to last diff |
+| `:BuffergolfToggleOverlay` | `<leader>do` | Toggle diff overlay |
 
 ## Configuration
-```lua
-require("keymash").setup({
-  dim_hl = "KeymashDim",      -- dim highlight group (defaults link to Comment)
-  correct_hl = "KeymashCorrect", -- used only for error fallback; correct reveals syntax
-  error_hl = "KeymashError",    -- red overlay for incorrect chars
-  cursor_hl = "KeymashCursor",  -- optional helper group
-  dim_blend = 70,               -- intensity for dim fallback
-  auto_tab = true,              -- treat <Tab>/space as correct when expected is a tab
-  auto_scroll = true,           -- keep folds opened as you type (future use)
-  compat = {
-    disable = {
-      mini_pairs = true,        -- disable mini.pairs in practice buffers
-      mini_surround = true,     -- disable mini.surround in practice buffers
-      matchparen = true,        -- suppress MatchParen highlight in practice window (and disable nvim-matchup pair highlight)
-    },
-    -- Optional hook for custom per-buffer tweaks:
-    -- custom = function(buf)
-    --   -- Example: disable your own plugin locally
-    --   vim.b.some_plugin_disable = true
-    -- end,
-  },
-})
-```
-All highlight groups include cterm fallbacks and are re-applied on `ColorScheme`.
 
-### Compatibility notes
-- Keymash uses overtype behavior and intercepts `InsertCharPre` to cancel insertion. Some plugins that modify insert behavior (pairs/surround/match) can conflict.
-- By default, Keymash disables in the practice buffer only:
-  - `mini.pairs` via `b:minipairs_disable = true`
-  - `mini.surround` via `b:minisurround_disable = true`
-  - `matchparen` by remapping `MatchParen` highlight to `NONE` for the practice window (and `b:matchup_matchparen_enabled = 0` if nvim-matchup is installed)
-- You can opt out of any of these by setting the corresponding flag to `false` in `compat.disable`, or add your own `compat.custom(buf)` to tweak more plugins per buffer.
+For detailed configuration options including:
 
-#### Opting out or adding your own tweaks
+- Plugin disabling customization
+- Mode-specific settings
+- Window positioning
+
+See the **[Configuration Guide](docs/configuration.md)**.
+
+## Keystroke Tracking & Golf Scoring
+
+The plugin tracks every keystroke during practice, enabling golf-style scoring where the goal is to complete the text in the fewest keystrokes possible.
+
+- **Keystroke Counter**: Real-time count in stats window
+- **Par Calculation**: Shows "optimal" keystrokes min(character count + newlines + 1, character edit distance)
+- **Golf Scoring**: Compare your count against par for efficiency
+
+### Known Limitations
+
+Some vim motion commands (like `G`, `gg`, `<C-u/d>`) may count as 3-5 keystrokes instead of 1 due to terminal escape sequences. This is a known limitation of tracking keystrokes at the vim level. Eventually will figure out a way for this to not be like that.
+
+## Commands
+
+
+| Command | Description |
+|---------|-------------|
+| `:Buffergolf` | Toggle practice session with mode selection |
+| `:BuffergolfStop` | Stop active practice session |
+| `:BuffergolfCountdown` | Start countdown timer practice |
+| `:BuffergolfTyping` | Start typing practice (empty buffer) |
+
+
+NOTE: `BuffergolfCountdown` will have unlimited time if you hit enter without putting in any time. Additionally, if you use `BuffergolfCountdown` on an active golf session, it will restart the session for you to try again from the beginning.
+
+## Buffer Variables
+
+The plugin sets `vim.b.buffergolf_practice = true` in practice buffers. Use this to conditionally disable conflicting plugins:
+
 ```lua
-require("keymash").setup({
-  compat = {
-    disable = {
-      mini_pairs = false,           -- keep mini.pairs enabled
-      mini_surround = true,
-      matchparen = false,           -- keep builtin matchparen highlighting
-    },
-    custom = function(buf)
-      -- Example: disable nvim-autopairs only inside the practice buffer
-      vim.api.nvim_buf_set_var(buf, "autopairs_enabled", false)
-      -- Or toggle lexima.vim:
-      -- vim.b.lexima_disabled = 1
-    end,
-  },
-})
+-- Example: Disable plugin in buffergolf practice buffers
+if vim.b.buffergolf_practice then
+  return
+end
 ```
 
-## How It Works
-- Captures the current buffer’s text and opens a scratch practice buffer
-- Applies a full-line dim highlight via namespace
-- Intercepts typing (`InsertCharPre`) and cancels insertion, advancing the cursor
-- For correct chars, it removes the dim at that column so your syntax color shows
-- For errors, it overlays a red 1‑char extmark
+## Statusline Integration
 
-## Roadmap
-- Visual selection support (`start_visual`) to practice ranges
-- Optional floating window UI
-- Stats (accuracy/WPM) per session
+BufferGolf provides a public API for integrating session stats into your statusline:
 
-## Contributing
-Issues and PRs are welcome. Please include a minimal reproduction for visual or highlight issues (Neovim version, colorscheme, and a short snippet). Thanks!
+```lua
+local buffergolf = require("buffergolf")
+local stats = buffergolf.get_session_stats()
+
+if stats then
+  -- Available stats:
+  -- stats.time         -- Formatted time string (e.g., "02:34")
+  -- stats.wpm          -- Current WPM
+  -- stats.keystrokes   -- Total keystrokes
+  -- stats.par          -- Par value (golf mode)
+  -- stats.score_pct    -- Score percentage (golf mode)
+  -- stats.mode         -- "typing" or "golf"
+  -- stats.completed    -- boolean
+  -- stats.diff         -- Diff summary (golf mode, from mini.diff)
+
+  -- Example statusline component:
+  local status = string.format("BG %s | WPM: %d | Keys: %d", stats.mode, stats.wpm, stats.keystrokes)
+  if stats.mode == "golf" and stats.par > 0 then
+    status = status .. string.format(" | Par: %d", stats.par)
+  end
+end
+```
+
+## Compatibility
+
+You may find that you have some plugins that mess with ghost text or do things that you want disabled during golf sessions. For example, match parens in typing mode can actually be a little annoying. BufferGolf automatically detects and can disable many common plugins that might interfere with practice sessions. See the [Configuration Guide](docs/configuration.md#supported-plugins) for the full list of supported plugins and how to customize the behavior.
+

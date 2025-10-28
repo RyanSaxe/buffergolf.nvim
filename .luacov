@@ -1,0 +1,25 @@
+-- Configuration for LuaCov code coverage
+return {
+  -- Include plugin source files
+  include = {
+    "lua/buffergolf/.+$",
+  },
+
+  -- Exclude test and dependency files
+  exclude = {
+    "tests/",
+    ".tests/",
+    "deps/",
+    ".luarocks/",
+    "/vim/",
+    "/nvim/",
+  },
+
+  -- Output files
+  statsfile = "luacov.stats.out",
+  reportfile = "luacov.report.out",
+
+  -- Let the script handle report generation
+  runreport = false,
+  deletestats = false,
+}
