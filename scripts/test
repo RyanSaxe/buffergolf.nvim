@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
 
-# Check for coverage flag
-if [[ "$*" == *"--coverage"* ]]; then
-  echo "Running tests with coverage..."
-  # Clean up old coverage files
-  rm -f luacov.stats.out luacov.report.out
-fi
+# Simple test runner with optional coverage reporting
+
+# Clean up old coverage files
+rm -f luacov.stats.out luacov.report.out
 
 # Run tests using mini.test via the minit.lua bootstrap
-nvim -l tests/minit.lua --minitest "$@"
+# Coverage is always enabled if luacov is available
+nvim -l tests/minit.lua --minitest
 EXIT_CODE=$?
 
-# Show coverage report if coverage was enabled and tests passed
-if [[ "$*" == *"--coverage"* ]] && [ $EXIT_CODE -eq 0 ]; then
+# Show coverage report if requested and tests passed
+if [[ "$1" == "--coverage" ]] && [ $EXIT_CODE -eq 0 ]; then
   echo ""
   echo "Coverage Report:"
   echo "================"

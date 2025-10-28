@@ -1,21 +1,8 @@
 #!/usr/bin/env -S nvim -l
 
--- Check if coverage is requested
-local coverage_enabled = false
-for _, arg in ipairs(vim.v.argv) do
-  if arg == "--coverage" then
-    coverage_enabled = true
-    break
-  end
-end
-
--- Load luacov if coverage is enabled
-if coverage_enabled then
-  local ok, _ = pcall(require, "luacov")
-  if not ok then
-    print("Warning: luacov not found. Install with: luarocks install luacov")
-  end
-end
+-- Always try to load luacov for coverage tracking (if available)
+-- This is lightweight and doesn't affect test performance
+pcall(require, "luacov")
 
 -- Set up isolated test environment
 vim.env.LAZY_STDPATH = ".tests"
