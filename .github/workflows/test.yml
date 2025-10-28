@@ -77,19 +77,12 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then
             sudo luarocks install luacov
-            # Add luarocks bin to PATH for the luacov command
-            echo "$(luarocks path --lr-bin)" >> $GITHUB_PATH
           else
             luarocks --local install luacov
-            # Add local luarocks bin to PATH for the luacov command
-            echo "$(luarocks path --lr-bin)" >> $GITHUB_PATH
           fi
-          # Export luarocks paths so Neovim can find luacov
-          # The ;; at the end includes default Lua search paths
+          echo "$(luarocks path --lr-bin)" >> $GITHUB_PATH
           echo "LUA_PATH=$(luarocks path --lr-path);;" >> $GITHUB_ENV
           echo "LUA_CPATH=$(luarocks path --lr-cpath);;" >> $GITHUB_ENV
-          echo "Installed luacov, LUA_PATH: $(luarocks path --lr-path)"
-          echo "Luarocks bin path: $(luarocks path --lr-bin)"
 
       - name: Cache test dependencies
         uses: actions/cache@v4
@@ -106,13 +99,7 @@ jobs:
         run: |
           chmod +x scripts/test
           if [ "${{ matrix.coverage }}" = "true" ]; then
-            echo "Running tests with coverage..."
-            echo "LUA_PATH: $LUA_PATH"
-            echo "LUA_CPATH: $LUA_CPATH"
             ./scripts/test --coverage
-            echo "Test exit code: $?"
-            echo "Checking for coverage files..."
-            ls -la luacov* || echo "No luacov files found"
           else
             ./scripts/test
           fi
@@ -142,20 +129,10 @@ jobs:
           echo "- OS: ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
           echo "- Neovim: ${{ matrix.neovim_version }}" >> $GITHUB_STEP_SUMMARY
           echo "- Coverage: ${{ matrix.coverage }}" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ matrix.coverage }}" = "true" ]; then
-            if [ -f luacov.report.out ]; then
-              echo "### Coverage Summary" >> $GITHUB_STEP_SUMMARY
-              echo '```' >> $GITHUB_STEP_SUMMARY
-              tail -20 luacov.report.out >> $GITHUB_STEP_SUMMARY
-              echo '```' >> $GITHUB_STEP_SUMMARY
-            else
-              echo "### Coverage Status" >> $GITHUB_STEP_SUMMARY
-              echo "⚠️ Coverage report not generated" >> $GITHUB_STEP_SUMMARY
-              if [ -f luacov.stats.out ]; then
-                echo "- Stats file exists but report generation failed" >> $GITHUB_STEP_SUMMARY
-              else
-                echo "- Stats file not found - luacov may not have run" >> $GITHUB_STEP_SUMMARY
-              fi
-            fi
+          if [ "${{ matrix.coverage }}" = "true" ] && [ -f luacov.report.out ]; then
+            echo "### Coverage Summary" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -20 luacov.report.out >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
           fi
 
