@@ -50,15 +50,17 @@ local function merge_disabled_plugins(base, override)
   return result
 end
 
-function M.get_mode_config(mode)
-  local mode_config = config[mode .. "_mode"]
+function M.get_mode_config(mode, base_config)
+  -- Use provided base_config or fall back to module config
+  local base = base_config or config
+  local mode_config = base[mode .. "_mode"]
   if not mode_config then
-    return vim.deepcopy(config)
+    return vim.deepcopy(base)
   end
 
-  local result = vim.deepcopy(config)
+  local result = vim.deepcopy(base)
   if mode_config.disabled_plugins then
-    result.disabled_plugins = merge_disabled_plugins(config.disabled_plugins, mode_config.disabled_plugins)
+    result.disabled_plugins = merge_disabled_plugins(base.disabled_plugins, mode_config.disabled_plugins)
   end
 
   for k, v in pairs(mode_config) do
@@ -112,5 +114,8 @@ function M.setup(opts)
 
   return config
 end
+
+-- Make merge_disabled_plugins available for external use
+M.merge_disabled_plugins = merge_disabled_plugins
 
 return M

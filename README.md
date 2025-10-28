@@ -23,15 +23,8 @@ INSERT DEMO VIDEO HERE.
 ```lua
 return {
   {
-    "nvim-mini/mini.diff",
-    config = function()
-      require('mini.diff').setup()
-    end,
-  },
-  {
     "ryansaxe/buffergolf.nvim",
     dependencies = { "nvim-mini/mini.diff" },
-    config = true, -- uses default configuration
   },
 }
 ```
@@ -40,12 +33,6 @@ return {
 
 ```lua
 return {
-  {
-    "nvim-mini/mini.diff",
-    config = function()
-      require('mini.diff').setup()
-    end,
-  },
   {
     "ryansaxe/buffergolf.nvim",
     dependencies = { "nvim-mini/mini.diff" },

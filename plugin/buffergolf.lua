@@ -4,4 +4,5 @@ end
 
 vim.g.buffergolf_loaded = true
 
-require("buffergolf").setup()
+-- Don't call setup() here - let the user's plugin manager handle it
+-- This prevents conflicts with user configuration

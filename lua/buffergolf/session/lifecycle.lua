@@ -86,9 +86,8 @@ local function create_session(origin_buf, practice_buf, reference, config, mode,
 end
 
 local function init_session_common(session)
-  -- Get mode-specific configuration
-  local mode_config = config.get_mode_config(session.mode)
-  session.config = mode_config
+  -- Apply mode-specific configuration overrides
+  session.config = config.get_mode_config(session.mode, session.config)
 
   storage.store(session)
   buffer.apply_defaults(session)
