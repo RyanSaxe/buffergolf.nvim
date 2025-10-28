@@ -41,10 +41,10 @@ jobs:
           mkdir -p ${{ runner.temp }}/nvim
           if [ "${{ matrix.neovim_version }}" = "stable" ]; then
             echo "Installing stable Neovim..."
-            wget -q https://github.com/neovim/neovim/releases/download/stable/nvim.appimage -O ${{ runner.temp }}/nvim/nvim.appimage
+            wget -q https://github.com/neovim/neovim/releases/download/stable/nvim-linux-x86_64.appimage -O ${{ runner.temp }}/nvim/nvim.appimage
           else
             echo "Installing nightly Neovim..."
-            wget -q https://github.com/neovim/neovim/releases/download/nightly/nvim.appimage -O ${{ runner.temp }}/nvim/nvim.appimage
+            wget -q https://github.com/neovim/neovim/releases/download/nightly/nvim-linux-x86_64.appimage -O ${{ runner.temp }}/nvim/nvim.appimage
           fi
           cd ${{ runner.temp }}/nvim
           chmod a+x ./nvim.appimage
