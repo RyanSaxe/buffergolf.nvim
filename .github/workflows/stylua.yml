@@ -1,10 +1,8 @@
 name: StyLua
 
 on:
-  push:
-    branches: [ main, master, rewrite ]
   pull_request:
-    branches: [ main, master ]
+    branches: [main]
 
 jobs:
   stylua:
@@ -28,3 +26,4 @@ jobs:
             exit 1
           fi
           echo "✅ All Lua files are properly formatted!"
+

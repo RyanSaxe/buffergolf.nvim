@@ -1,8 +1,5 @@
 name: Tests
-
 on:
-  push:
-    branches: [main, rewrite]
   pull_request:
     branches: [main]
 
@@ -82,8 +79,9 @@ jobs:
         run: |
           sudo luarocks install luacov
           # Export luarocks paths so Neovim can find luacov
-          echo "LUA_PATH=$(luarocks path --lr-path)" >> $GITHUB_ENV
-          echo "LUA_CPATH=$(luarocks path --lr-cpath)" >> $GITHUB_ENV
+          # The ;; at the end includes default Lua search paths
+          echo "LUA_PATH=$(luarocks path --lr-path);;" >> $GITHUB_ENV
+          echo "LUA_CPATH=$(luarocks path --lr-cpath);;" >> $GITHUB_ENV
 
       - name: Cache test dependencies
         uses: actions/cache@v4
@@ -134,3 +132,4 @@ jobs:
             tail -20 luacov.report.out >> $GITHUB_STEP_SUMMARY || echo "Coverage report not available" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
           fi
+
