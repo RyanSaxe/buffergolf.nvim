@@ -7,8 +7,6 @@ Transform any buffer into an interactive practice environment. There are two mod
 1. Typing: Practice re-typing source code from scratch while seeing the reference text as ghost text. Get real-time feedback on your WPM and challenge yourself with countdown timers.
 2. Golf: Open up a vertical split to compare two pieces of text (coming from buffers, registers, files, git commits, etc.). Try and convert the practice buffer to the reference buffer with the least amount of keystrokes. The reference buffer will have a git diff overlay for convenience.
 
-INSERT DEMO VIDEO HERE.
-
 ## Requirements
 
 - Neovim 0.11+
@@ -48,6 +46,7 @@ return {
           prev_hunk = "[h",
           first_hunk = "[H",
           last_hunk = "]H",
+          toggle_overlay = "<leader>do",
         },
       },
       windows = {
@@ -131,7 +130,7 @@ Some vim motion commands (like `G`, `gg`, `<C-u/d>`) may count as 3-5 keystrokes
 | `:BuffergolfTyping` | Start typing practice (empty buffer) |
 
 
-NOTE: `BufferGolfCountdown` will have unlimited time if you hit enter without putting in any time. Additionally, if you use `BufferGolfCountdown` on an active golf session, it will restart the session for you to try again from the beginning.
+NOTE: `BuffergolfCountdown` will have unlimited time if you hit enter without putting in any time. Additionally, if you use `BuffergolfCountdown` on an active golf session, it will restart the session for you to try again from the beginning.
 
 ## Buffer Variables
 
@@ -141,6 +140,33 @@ The plugin sets `vim.b.buffergolf_practice = true` in practice buffers. Use this
 -- Example: Disable plugin in buffergolf practice buffers
 if vim.b.buffergolf_practice then
   return
+end
+```
+
+## Statusline Integration
+
+BufferGolf provides a public API for integrating session stats into your statusline:
+
+```lua
+local buffergolf = require("buffergolf")
+local stats = buffergolf.get_session_stats()
+
+if stats then
+  -- Available stats:
+  -- stats.time         -- Formatted time string (e.g., "02:34")
+  -- stats.wpm          -- Current WPM
+  -- stats.keystrokes   -- Total keystrokes
+  -- stats.par          -- Par value (golf mode)
+  -- stats.score_pct    -- Score percentage (golf mode)
+  -- stats.mode         -- "typing" or "golf"
+  -- stats.completed    -- boolean
+  -- stats.diff         -- Diff summary (golf mode, from mini.diff)
+
+  -- Example statusline component:
+  local status = string.format("BG %s | WPM: %d | Keys: %d", stats.mode, stats.wpm, stats.keystrokes)
+  if stats.mode == "golf" and stats.par > 0 then
+    status = status .. string.format(" | Par: %d", stats.par)
+  end
 end
 ```
 

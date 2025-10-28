@@ -6,14 +6,17 @@ pcall(require, "luacov")
 
 -- Set up isolated test environment
 vim.env.LAZY_STDPATH = ".tests"
-vim.env.LAZY_PATH = vim.env.LAZY_PATH or vim.fs.normalize("~/projects/lazy.nvim")
 
 -- Bootstrap lazy.nvim
--- Prefer local development copy if available, otherwise download
-local bootstrap_path = vim.env.LAZY_PATH .. "/bootstrap.lua"
-if vim.fn.isdirectory(vim.env.LAZY_PATH) == 1 and vim.fn.filereadable(bootstrap_path) == 1 then
-  vim.notify("Using local lazy.nvim from: " .. vim.env.LAZY_PATH, vim.log.levels.INFO)
-  loadfile(bootstrap_path)()
+-- Prefer local development copy if available (via LAZY_PATH env var), otherwise download
+if vim.env.LAZY_PATH then
+  local bootstrap_path = vim.env.LAZY_PATH .. "/bootstrap.lua"
+  if vim.fn.isdirectory(vim.env.LAZY_PATH) == 1 and vim.fn.filereadable(bootstrap_path) == 1 then
+    vim.notify("Using local lazy.nvim from: " .. vim.env.LAZY_PATH, vim.log.levels.INFO)
+    loadfile(bootstrap_path)()
+  else
+    error("LAZY_PATH is set but bootstrap.lua not found at: " .. bootstrap_path)
+  end
 else
   -- Download and run bootstrap
   vim.notify("Downloading lazy.nvim bootstrap...", vim.log.levels.INFO)

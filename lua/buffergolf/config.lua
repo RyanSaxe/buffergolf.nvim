@@ -12,7 +12,7 @@ local defaults = {
   keymaps = {
     toggle = "<leader>bg",
     countdown = "<leader>bG",
-    golf = { next_hunk = "]h", prev_hunk = "[h", first_hunk = "[H", last_hunk = "]H" },
+    golf = { next_hunk = "]h", prev_hunk = "[h", first_hunk = "[H", last_hunk = "]H", toggle_overlay = "<leader>do" },
   },
   windows = {
     reference = { position = "right", size = 50 }, -- size in percentage of screen width
