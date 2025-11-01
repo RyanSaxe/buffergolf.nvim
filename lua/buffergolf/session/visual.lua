@@ -150,13 +150,33 @@ function M.attach_change_watcher(session, opts)
   opts = opts or {}
 
   local ok, res = pcall(vim.api.nvim_buf_attach, session.practice_buf, false, {
-    on_lines = function(_, buf)
+    on_lines = function(_, buf, _, first_line, last_line_old, last_line_new)
       if session.refreshing or not buffer.buf_valid(buf) then
         return
       end
       if opts.is_session_active and not opts.is_session_active(buf, session) then
         return true
       end
+
+      -- TEST: Immediately update ghost text on edited lines synchronously to prevent flicker
+      -- This prevents showing stale ghost text at the new cursor position
+      if session.mode == "typing" then
+        local actual_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, true)
+        for row = first_line + 1, math.max(last_line_old, last_line_new) do
+          local actual = actual_lines[row] or ""
+          local reference = session.reference_lines[row] or ""
+          local prefix = 0
+          for i = 1, math.min(#actual, #reference) do
+            if actual:byte(i) ~= reference:byte(i) then
+              break
+            end
+            prefix = i
+          end
+          local ghost = prefix < #reference and reference:sub(prefix + 1) or ""
+          M.set_ghost_mark(session, row, #actual, ghost, actual)
+        end
+      end
+
       if opts.on_first_edit then
         opts.on_first_edit(session)
       end

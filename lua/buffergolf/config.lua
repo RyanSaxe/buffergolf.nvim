@@ -1,10 +1,7 @@
 local M = {}
 
 local defaults = {
-  disabled_plugins = {
-    _auto = true,
-    blink = false, -- Don't disable blink.cmp by default
-  },
+  disabled_plugins = "auto",
   typing_mode = {
     disabled_plugins = { _inherit = true, matchparen = true, treesitter_context = true },
   },
