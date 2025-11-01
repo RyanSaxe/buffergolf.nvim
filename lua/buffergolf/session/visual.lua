@@ -58,7 +58,7 @@ function M.set_ghost_mark(session, row, col, text, actual)
   local opts = {
     virt_text = { { virt_text, "BuffergolfGhost" } },
     virt_text_pos = "inline",
-    hl_mode = "combine",
+    hl_mode = "replace", -- Use "replace" instead of "combine" to prevent italic/bold inheritance from underlying text
     priority = session.prio_ghost,
     id = session.ghost_marks[row],
   }
@@ -89,14 +89,17 @@ function M.refresh(session)
     local actual_line_count = vim.api.nvim_buf_line_count(bufnr)
     local total = math.max(actual_line_count, #session.reference_lines)
     session.mismatch_ranges = session.mismatch_ranges or {}
+    session.ghost_cache = session.ghost_cache or {}
+
+    local actual_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, true)
 
     for row = 1, total do
-      local actual = (vim.api.nvim_buf_get_lines(bufnr, row - 1, row, true)[1] or "")
+      local actual = actual_lines[row] or ""
       local reference = session.reference_lines[row] or ""
 
       local prefix = 0
       for i = 1, math.min(#actual, #reference) do
-        if actual:sub(i, i) ~= reference:sub(i, i) then
+        if actual:byte(i) ~= reference:byte(i) then
           break
         end
         prefix = i

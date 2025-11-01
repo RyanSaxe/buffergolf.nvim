@@ -81,15 +81,15 @@ M.registry = {
       end
     end,
   },
-  blink = {
-    detect = function()
-      return pcall(require, "blink.cmp")
-    end,
-    disable = function(ctx)
-      ctx:set_var("blink_cmp_enabled", false)
-      pcall(vim.cmd, "BlinkDisable")
-    end,
-  },
+  -- blink = {
+  --   detect = function()
+  --     return pcall(require, "blink.cmp")
+  --   end,
+  --   disable = function(ctx)
+  --     ctx:set_var("blink_cmp_enabled", false)
+  --     pcall(vim.cmd, "BlinkDisable")
+  --   end,
+  -- },
   coq = {
     detect = function()
       return vim.g.loaded_coq == 1
@@ -185,6 +185,21 @@ M.registry = {
 
 local function apply_plugin(name, plugin, disabled, ctx)
   local should_disable = disabled._auto and disabled[name] ~= false or disabled[name] == true
+
+  -- Debug logging for blink
+  if name == "blink" then
+    vim.notify(
+      string.format(
+        "[BufferGolf Debug] blink plugin:\n  _auto=%s\n  blink=%s\n  should_disable=%s\n  detected=%s",
+        tostring(disabled._auto),
+        tostring(disabled[name]),
+        tostring(should_disable),
+        tostring(pcall(plugin.detect))
+      ),
+      vim.log.levels.INFO
+    )
+  end
+
   if should_disable and pcall(plugin.detect) then
     pcall(plugin.disable, ctx)
   end

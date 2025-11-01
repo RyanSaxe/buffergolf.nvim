@@ -17,13 +17,46 @@ local function can_link(name)
   return ok and hl ~= nil
 end
 
+-- Dim a color by reducing its brightness
+-- color: hex string like "#rrggbb" or a number
+-- factor: 0.0 to 1.0, where lower values make it dimmer (default 0.75)
+local function dim_color(color, factor)
+  factor = factor or 0.75
+
+  -- Convert to hex string if it's a number
+  local hex
+  if type(color) == "number" then
+    hex = string.format("#%06x", color)
+  else
+    hex = color
+  end
+
+  -- Extract RGB components
+  local r = tonumber(hex:sub(2, 3), 16)
+  local g = tonumber(hex:sub(4, 5), 16)
+  local b = tonumber(hex:sub(6, 7), 16)
+
+  -- Reduce brightness
+  r = math.floor(r * factor)
+  g = math.floor(g * factor)
+  b = math.floor(b * factor)
+
+  return string.format("#%02x%02x%02x", r, g, b)
+end
+
 local function ensure_highlights()
   if not hl_exists("BuffergolfGhost") then
-    if can_link("Comment") then
-      vim.api.nvim_set_hl(0, "BuffergolfGhost", { link = "Comment" })
-    else
-      vim.api.nvim_set_hl(0, "BuffergolfGhost", { fg = "#555555", ctermfg = 8 })
-    end
+    -- Get Comment color and dim it, explicitly disable italic
+    local comment_hl = vim.api.nvim_get_hl(0, { name = "Comment" })
+    local fg_color = comment_hl.fg or "#888888"
+    local dimmed_fg = dim_color(fg_color, 0.75) -- 75% brightness
+
+    vim.api.nvim_set_hl(0, "BuffergolfGhost", {
+      fg = dimmed_fg,
+      ctermfg = 8, -- Fallback for terminal
+      italic = false, -- Explicitly disable italic to prevent flickering
+      bold = false,
+    })
   end
 
   if not hl_exists("BuffergolfMismatch") then
