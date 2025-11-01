@@ -89,7 +89,6 @@ function M.refresh(session)
     local actual_line_count = vim.api.nvim_buf_line_count(bufnr)
     local total = math.max(actual_line_count, #session.reference_lines)
     session.mismatch_ranges = session.mismatch_ranges or {}
-    session.ghost_cache = session.ghost_cache or {}
 
     local actual_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, true)
 
