@@ -59,8 +59,9 @@ jobs:
           nvim --version
 
       # Install luarocks (required for coverage tools)
+      # Linux started failing without luarocks generally so deleted coverage requirement
       - name: Install luarocks (Linux)
-        if: runner.os == 'Linux' && matrix.coverage
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y luarocks
