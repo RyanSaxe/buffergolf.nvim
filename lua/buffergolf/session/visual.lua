@@ -58,7 +58,7 @@ function M.set_ghost_mark(session, row, col, text, actual)
   local opts = {
     virt_text = { { virt_text, "BuffergolfGhost" } },
     virt_text_pos = "inline",
-    hl_mode = "combine",
+    hl_mode = "replace", -- Use "replace" instead of "combine" to prevent italic/bold inheritance from underlying text
     priority = session.prio_ghost,
     id = session.ghost_marks[row],
   }
@@ -90,13 +90,15 @@ function M.refresh(session)
     local total = math.max(actual_line_count, #session.reference_lines)
     session.mismatch_ranges = session.mismatch_ranges or {}
 
+    local actual_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, true)
+
     for row = 1, total do
-      local actual = (vim.api.nvim_buf_get_lines(bufnr, row - 1, row, true)[1] or "")
+      local actual = actual_lines[row] or ""
       local reference = session.reference_lines[row] or ""
 
       local prefix = 0
       for i = 1, math.min(#actual, #reference) do
-        if actual:sub(i, i) ~= reference:sub(i, i) then
+        if actual:byte(i) ~= reference:byte(i) then
           break
         end
         prefix = i
@@ -148,13 +150,48 @@ function M.attach_change_watcher(session, opts)
   opts = opts or {}
 
   local ok, res = pcall(vim.api.nvim_buf_attach, session.practice_buf, false, {
-    on_lines = function(_, buf)
+    on_lines = function(_, buf, _, first_line, last_line_old, last_line_new)
       if session.refreshing or not buffer.buf_valid(buf) then
         return
       end
       if opts.is_session_active and not opts.is_session_active(buf, session) then
         return true
       end
+
+      -- Immediately update ghost text on edited lines synchronously to prevent flicker
+      -- This prevents showing stale ghost text at the new cursor position
+      if session.mode == "typing" then
+        local ok_update = pcall(function()
+          local actual_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, true)
+          local actual_line_count = #actual_lines
+
+          -- Only update lines that exist in the buffer after the change
+          -- Use last_line_new (not last_line_old) since that's the state AFTER the edit
+          for row = first_line + 1, math.min(last_line_new, actual_line_count) do
+            if row <= #actual_lines then
+              local actual = actual_lines[row] or ""
+              local reference = session.reference_lines[row] or ""
+              local prefix = 0
+              for i = 1, math.min(#actual, #reference) do
+                if actual:byte(i) ~= reference:byte(i) then
+                  break
+                end
+                prefix = i
+              end
+              local ghost = prefix < #reference and reference:sub(prefix + 1) or ""
+              -- Only set extmark if the line still exists
+              if row <= vim.api.nvim_buf_line_count(buf) then
+                M.set_ghost_mark(session, row, #actual, ghost, actual)
+              end
+            end
+          end
+        end)
+        -- If synchronous update fails, the scheduled refresh will fix it
+        if not ok_update then
+          -- Silently fail - scheduled refresh will handle it
+        end
+      end
+
       if opts.on_first_edit then
         opts.on_first_edit(session)
       end

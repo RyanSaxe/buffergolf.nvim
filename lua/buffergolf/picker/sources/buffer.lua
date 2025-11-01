@@ -28,6 +28,7 @@ function M.select(origin_buf, target_lines, config, start_golf_fn)
         vim.api.nvim_buf_is_loaded(buf)
         and vim.api.nvim_get_option_value("buflisted", { buf = buf })
         and buf ~= origin_buf
+        and not vim.b[buf].buffergolf_practice -- Exclude practice buffers
       then
         table.insert(buffer_options, { label = get_buffer_name(buf), value = buf })
       end

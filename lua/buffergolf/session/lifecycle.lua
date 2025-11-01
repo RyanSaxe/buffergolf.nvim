@@ -50,8 +50,8 @@ local function setup_practice_buffer(practice_buf, origin_buf, origin_ft)
     swapfile = false,
     undofile = false,
     modifiable = true,
-    buflisted = false,
-    buftype = "nofile",
+    buflisted = true, -- Keep buffer listed so completion plugins work
+    -- buftype removed - leave as default empty string so completion works
   }
   for opt, val in pairs(opts) do
     vim.api.nvim_set_option_value(opt, val, { buf = practice_buf })
@@ -115,7 +115,7 @@ function M.start(origin_bufnr, config, target_lines)
   end
   reference = buffer.normalize_lines(reference, origin_bufnr)
 
-  local practice_buf = vim.api.nvim_create_buf(false, false)
+  local practice_buf = vim.api.nvim_create_buf(true, false) -- Make buffer listed so completion plugins work
   vim.api.nvim_buf_set_name(practice_buf, buffer.generate_buffer_name(origin_bufnr, ".golf"))
   setup_practice_buffer(practice_buf, origin_bufnr, vim.api.nvim_get_option_value("filetype", { buf = origin_bufnr }))
 
@@ -158,7 +158,7 @@ function M.start_golf(origin_bufnr, start_lines, target_lines, config)
   reference = buffer.normalize_lines(reference, origin_bufnr)
   start_lines = buffer.normalize_lines(start_lines, origin_bufnr)
 
-  local practice_buf = vim.api.nvim_create_buf(false, false)
+  local practice_buf = vim.api.nvim_create_buf(true, false) -- Make buffer listed so completion plugins work
   vim.api.nvim_buf_set_name(practice_buf, buffer.generate_buffer_name(origin_bufnr, ".golf"))
   setup_practice_buffer(practice_buf, origin_bufnr, vim.api.nvim_get_option_value("filetype", { buf = origin_bufnr }))
   vim.api.nvim_buf_set_lines(practice_buf, 0, -1, true, start_lines)

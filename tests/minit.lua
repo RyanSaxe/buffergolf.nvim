@@ -71,9 +71,16 @@ require("lazy.minit").setup({
   spec = {
     "echasnovski/mini.diff",
     {
+      "echasnovski/mini.test",
+      rocks = { "luassert" },
+    },
+    {
       dir = vim.uv.cwd(),
       name = "buffergolf.nvim",
       opts = {},
     },
+  },
+  rocks = {
+    enabled = true,
   },
 })
