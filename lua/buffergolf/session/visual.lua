@@ -158,22 +158,37 @@ function M.attach_change_watcher(session, opts)
         return true
       end
 
-      -- TEST: Immediately update ghost text on edited lines synchronously to prevent flicker
+      -- Immediately update ghost text on edited lines synchronously to prevent flicker
       -- This prevents showing stale ghost text at the new cursor position
       if session.mode == "typing" then
-        local actual_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, true)
-        for row = first_line + 1, math.max(last_line_old, last_line_new) do
-          local actual = actual_lines[row] or ""
-          local reference = session.reference_lines[row] or ""
-          local prefix = 0
-          for i = 1, math.min(#actual, #reference) do
-            if actual:byte(i) ~= reference:byte(i) then
-              break
+        local ok_update = pcall(function()
+          local actual_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, true)
+          local actual_line_count = #actual_lines
+
+          -- Only update lines that exist in the buffer after the change
+          -- Use last_line_new (not last_line_old) since that's the state AFTER the edit
+          for row = first_line + 1, math.min(last_line_new, actual_line_count) do
+            if row <= #actual_lines then
+              local actual = actual_lines[row] or ""
+              local reference = session.reference_lines[row] or ""
+              local prefix = 0
+              for i = 1, math.min(#actual, #reference) do
+                if actual:byte(i) ~= reference:byte(i) then
+                  break
+                end
+                prefix = i
+              end
+              local ghost = prefix < #reference and reference:sub(prefix + 1) or ""
+              -- Only set extmark if the line still exists
+              if row <= vim.api.nvim_buf_line_count(buf) then
+                M.set_ghost_mark(session, row, #actual, ghost, actual)
+              end
             end
-            prefix = i
           end
-          local ghost = prefix < #reference and reference:sub(prefix + 1) or ""
-          M.set_ghost_mark(session, row, #actual, ghost, actual)
+        end)
+        -- If synchronous update fails, the scheduled refresh will fix it
+        if not ok_update then
+          -- Silently fail - scheduled refresh will handle it
         end
       end
 
