@@ -2,6 +2,7 @@ local buffer = require("buffergolf.session.buffer")
 
 local M = {}
 
+-- Creates a split window to display the reference text in golf mode
 function M.create_reference_window(session)
   local ref_buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_name(ref_buf, buffer.generate_buffer_name(session.origin_buf, ".golf.ref"))
