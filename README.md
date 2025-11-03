@@ -1,6 +1,6 @@
 # buffergolf.nvim
 
-**A Neovim plugin for deliberate touch-typing and vim practice on actual code.**
+**A Neovim plugin for deliberate touch-typing and Vim practice on actual code.**
 
 Transform any buffer into an interactive practice environment. There are two modes:
 
