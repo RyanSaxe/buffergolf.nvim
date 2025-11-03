@@ -92,7 +92,7 @@ function M.setup(opts)
 
   config = vim.tbl_deep_extend("force", defaults, opts)
 
-  -- Validate
+  -- Validate configuration options
   local dp = config.disabled_plugins
   if dp and type(dp) ~= "string" and type(dp) ~= "table" then
     error("disabled_plugins must be 'auto' or a table")
