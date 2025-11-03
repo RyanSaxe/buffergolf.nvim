@@ -4,7 +4,7 @@ BufferGolf uses a flexible configuration system that allows you to customize how
 
 ## Quick Start
 
-Most users only need to configure keymaps. BufferGolf automatically handles plugin disabling and provides sensible defaults:
+Most users only need to configure keymaps. BufferGolf automatically handles plugin disabling during practice and provides sensible defaults:
 
 ```lua
 require("buffergolf").setup({
