@@ -20,6 +20,7 @@ end
 -- Dim a color by reducing its brightness
 -- color: hex string like "#rrggbb" or a number
 -- factor: 0.0 to 1.0, where lower values make it dimmer (default 0.75)
+-- returns: dimmed hex color string
 local function dim_color(color, factor)
   factor = factor or 0.75
 
