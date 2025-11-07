@@ -8,6 +8,26 @@ local register_source = require("buffergolf.picker.sources.register")
 local M = {}
 
 local git_repo_cache = {}
+local picker_history = {}
+
+local function add_to_history(choice_type, details)
+  table.insert(picker_history, {
+    type = choice_type,
+    details = details,
+    timestamp = os.time(),
+  })
+  if #picker_history > 10 then
+    table.remove(picker_history, 1)
+  end
+end
+
+function M.get_history()
+  return picker_history
+end
+
+function M.clear_history()
+  picker_history = {}
+end
 
 local function is_git_repo()
   local cwd = vim.fn.getcwd()
@@ -58,6 +78,9 @@ local function show_start_state_picker(origin_buf, target_lines, is_selection, c
     if not choice then
       return
     end
+
+    add_to_history(choice.value, { origin_buf = origin_buf })
+
     local sources = {
       empty = function()
         start_session(origin_buf, target_lines, config, true)

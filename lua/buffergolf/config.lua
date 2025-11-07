@@ -4,19 +4,32 @@ local defaults = {
   disabled_plugins = "auto",
   typing_mode = {
     disabled_plugins = { _inherit = true, matchparen = true, treesitter_context = true },
+    show_progress = true,
+    vim_mode = "insert",
   },
   golf_mode = {
     disabled_plugins = { _inherit = true, matchparen = false },
+    show_diff_stats = true,
+    auto_save = false,
   },
   auto_dedent = true,
+  show_notifications = true,
+  enable_animations = false,
   keymaps = {
     toggle = "<leader>bg",
     countdown = "<leader>bG",
+    reset = "<leader>br",
     golf = { next_hunk = "]h", prev_hunk = "[h", first_hunk = "[H", last_hunk = "]H", toggle_overlay = "<leader>do" },
   },
   windows = {
-    reference = { position = "right", size = 50 }, -- size in percentage of screen width
-    stats = { position = "top", height = 3 }, -- height in number of lines
+    reference = { position = "right", size = 50, border = "rounded" }, -- size in percentage of screen width
+    stats = { position = "top", height = 3, show_details = true }, -- height in number of lines
+    floating = { enabled = false, width = 80, height = 20 },
+  },
+  colors = {
+    ghost = nil,
+    mismatch = nil,
+    success = nil,
   },
 }
 
@@ -24,6 +37,23 @@ local config = {}
 
 function M.get()
   return config
+end
+
+function M.validate_keymap(keymap)
+  if not keymap or keymap == "" then
+    return true
+  end
+  if type(keymap) ~= "string" then
+    return false
+  end
+  return true
+end
+
+function M.get_window_config(window_type)
+  if not config.windows or not config.windows[window_type] then
+    return nil
+  end
+  return vim.deepcopy(config.windows[window_type])
 end
 
 local function merge_disabled_plugins(base, override)

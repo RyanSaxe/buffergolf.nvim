@@ -10,7 +10,29 @@ local visual = require("buffergolf.session.visual")
 
 local M = {}
 
+local lifecycle_debug = false
+
+local function log_lifecycle(event, session)
+  if not lifecycle_debug then
+    return
+  end
+
+  local info = {
+    event = event,
+    mode = session.mode,
+    practice_buf = session.practice_buf,
+    origin_buf = session.origin_buf,
+  }
+
+  print(vim.inspect(info))
+end
+
+function M.set_debug(enabled)
+  lifecycle_debug = enabled
+end
+
 function M.clear_state(session)
+  log_lifecycle("clear_state", session)
   -- Ensure all cleanup steps run even if one fails
   pcall(timer.cleanup, session)
   pcall(keystroke.cleanup_session, session)
@@ -106,6 +128,7 @@ end
 
 function M.start(origin_bufnr, config, target_lines)
   if storage.is_active(origin_bufnr) then
+    vim.notify("Session already active for this buffer", vim.log.levels.WARN)
     return
   end
 
@@ -126,6 +149,7 @@ function M.start(origin_bufnr, config, target_lines)
   vim.api.nvim_buf_set_lines(practice_buf, 0, -1, true, empty_lines)
 
   local session = create_session(origin_bufnr, practice_buf, reference, config, "typing", nil)
+  log_lifecycle("start_typing", session)
   init_session_common(session)
   timer.init(session)
 
@@ -164,8 +188,11 @@ function M.start_golf(origin_bufnr, start_lines, target_lines, config)
   vim.api.nvim_buf_set_lines(practice_buf, 0, -1, true, start_lines)
 
   local session = create_session(origin_bufnr, practice_buf, reference, config, "golf", start_lines)
+  log_lifecycle("start_golf", session)
+
   session.on_keystroke = function()
     if session.mode == "golf" and session.timer_state and not session.timer_state.start_time then
+      log_lifecycle("first_edit_in_golf", session)
       timer.on_first_edit(session)
     end
   end
@@ -192,6 +219,8 @@ function M.stop(bufnr)
   if not session then
     return
   end
+
+  log_lifecycle("stop", session)
 
   if session.reference_win and buffer.win_valid(session.reference_win) then
     pcall(vim.api.nvim_win_close, session.reference_win, true)

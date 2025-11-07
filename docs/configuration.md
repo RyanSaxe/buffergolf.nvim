@@ -2,6 +2,14 @@
 
 BufferGolf uses a flexible configuration system that allows you to customize how the plugin behaves during practice sessions.
 
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [Configuration Options](#configuration-options)
+- [Mode-Specific Configuration](#mode-specific-configuration)
+- [Window Configuration](#window-configuration)
+- [Advanced Usage](#advanced-usage)
+
 ## Quick Start
 
 Most users only need to configure keymaps. BufferGolf automatically handles plugin disabling and provides sensible defaults:
@@ -12,6 +20,7 @@ require("buffergolf").setup({
   keymaps = {
     toggle = "<leader>bg",
     countdown = "<leader>bG",
+    reset = "<leader>br",
   },
 })
 ```
@@ -21,6 +30,7 @@ The default configuration automatically:
 - Detects and disables interfering plugins during practice (`disabled_plugins = "auto"`)
 - Provides appropriate mode-specific settings
 - Uses sensible window positioning and highlights
+- Tracks WPM, keystrokes, and accuracy metrics
 
 ## Configuration Options
 

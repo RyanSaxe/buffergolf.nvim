@@ -1,7 +1,21 @@
 local M = {}
 
+local par_cache = {}
+
 local function trim(str)
   return str:match("^%s*(.-)%s*$") or ""
+end
+
+local function cache_par(key, value)
+  par_cache[key] = value
+end
+
+local function get_cached_par(key)
+  return par_cache[key]
+end
+
+function M.clear_par_cache()
+  par_cache = {}
 end
 
 local function levenshtein(s1, s2, is_char)
@@ -96,15 +110,66 @@ function M.calculate_par(session_or_ref, start_lines)
   local reference_lines = session and session.reference_lines or session_or_ref
   local mode = session and session.mode or "typing"
 
+  local cache_key = nil
+  if session and session.practice_buf then
+    cache_key = string.format("%d_%s", session.practice_buf, mode)
+    local cached = get_cached_par(cache_key)
+    if cached then
+      return cached
+    end
+  end
+
+  local par
   if mode == "golf" and session and session.practice_buf and session.reference_buf then
-    local par = golf_par_from_hunks(session)
+    par = golf_par_from_hunks(session)
     if not par and start_lines and reference_lines then
       par = M.calculate_edit_distance(start_lines, reference_lines)
     end
-    return par or 0
+    par = par or 0
+  else
+    par = typing_mode_par(reference_lines)
   end
 
-  return typing_mode_par(reference_lines)
+  if cache_key then
+    cache_par(cache_key, par)
+  end
+
+  return par
+end
+
+function M.get_par_breakdown(session)
+  if not session or session.mode ~= "golf" then
+    return nil
+  end
+
+  local ok, minidiff = pcall(require, "mini.diff")
+  if not ok then
+    return nil
+  end
+
+  local buf_data = minidiff.get_buf_data(session.reference_buf)
+  if not buf_data or not buf_data.hunks then
+    return nil
+  end
+
+  local breakdown = {
+    add = 0,
+    delete = 0,
+    change = 0,
+    total_hunks = #buf_data.hunks,
+  }
+
+  for _, hunk in ipairs(buf_data.hunks) do
+    if hunk.type == "add" then
+      breakdown.add = breakdown.add + 1
+    elseif hunk.type == "delete" then
+      breakdown.delete = breakdown.delete + 1
+    elseif hunk.type == "change" then
+      breakdown.change = breakdown.change + 1
+    end
+  end
+
+  return breakdown
 end
 
 return M

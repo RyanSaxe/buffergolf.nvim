@@ -3,6 +3,45 @@ local keystroke = require("buffergolf.session.keystroke")
 
 local M = {}
 
+local function validate_session(session)
+  if not session then
+    return false
+  end
+  if not session.reference_buf or not session.practice_buf then
+    return false
+  end
+  return buffer.buf_valid(session.reference_buf) and buffer.buf_valid(session.practice_buf)
+end
+
+local function get_hunk_count(session)
+  if not validate_session(session) then
+    return 0
+  end
+
+  local ok, minidiff = pcall(require, "mini.diff")
+  if not ok then
+    return 0
+  end
+
+  local buf_data = minidiff.get_buf_data(session.reference_buf)
+  if buf_data and buf_data.hunks then
+    return #buf_data.hunks
+  end
+  return 0
+end
+
+function M.get_hunk_info(session)
+  if not validate_session(session) then
+    return nil
+  end
+
+  local count = get_hunk_count(session)
+  return {
+    total = count,
+    has_changes = count > 0,
+  }
+end
+
 function M.goto_hunk_sync(session, direction)
   if not session or not session.reference_buf or not session.practice_buf then
     return

@@ -7,6 +7,15 @@ Transform any buffer into an interactive practice environment. There are two mod
 1. Typing: Practice re-typing source code from scratch while seeing the reference text as ghost text. Get real-time feedback on your WPM and challenge yourself with countdown timers.
 2. Golf: Open up a vertical split to compare two pieces of text (coming from buffers, registers, files, git commits, etc.). Try and convert the practice buffer to the reference buffer with the least amount of keystrokes. The reference buffer will have a git diff overlay for convenience.
 
+## Features
+
+- **Typing Practice**: Rebuild code from scratch with real-time WPM tracking
+- **Golf Mode**: Transform code efficiently with keystroke counting and par scoring
+- **Visual Feedback**: Ghost text, diff visualization, and stats display
+- **Flexible Sources**: Practice from buffers, files, git history, or registers
+- **Smart Defaults**: Auto-detection of conflicting plugins with customization options
+- **Statusline Integration**: Public API for custom statusline components
+
 ## Requirements
 
 - Neovim 0.11+
@@ -173,4 +182,22 @@ end
 ## Compatibility
 
 You may find that you have some plugins that mess with ghost text or do things that you want disabled during golf sessions. For example, match parens in typing mode can actually be a little annoying. BufferGolf automatically detects and can disable many common plugins that might interfere with practice sessions. See the [Configuration Guide](docs/configuration.md#supported-plugins) for the full list of supported plugins and how to customize the behavior.
+
+## Tips & Best Practices
+
+### Typing Mode
+- Start with shorter code snippets to build confidence
+- Focus on accuracy over speed initially
+- Use countdown mode to challenge yourself as you improve
+- Practice regularly with different file types to improve variety
+
+### Golf Mode
+- Study the diff overlay before starting your edits
+- Plan your approach before making changes
+- Use vim motions efficiently to reduce keystroke count
+- Remember that practice makes perfect - retry with countdown mode!
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues or pull requests.
 
