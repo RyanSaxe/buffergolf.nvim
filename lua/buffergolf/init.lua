@@ -6,6 +6,23 @@ local storage = require("buffergolf.session.storage")
 local M = {}
 
 local configured = false
+local session_count = 0
+
+local function log_debug(msg)
+  if M.config and M.config.debug then
+    vim.notify("[BufferGolf Debug] " .. msg, vim.log.levels.DEBUG)
+  end
+end
+
+local function increment_session_count()
+  session_count = session_count + 1
+  log_debug("Session count: " .. session_count)
+  return session_count
+end
+
+function M.get_session_count()
+  return session_count
+end
 
 local function hl_exists(name)
   local ok, hl = pcall(vim.api.nvim_get_hl, 0, { name = name })
@@ -173,7 +190,28 @@ function M.toggle_legacy()
   if storage.is_active(bufnr) then
     lifecycle.stop(bufnr)
   else
+    increment_session_count()
     lifecycle.start(bufnr, M.config)
+  end
+end
+
+function M.get_active_sessions()
+  local active = {}
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if storage.is_active(bufnr) then
+      table.insert(active, bufnr)
+    end
+  end
+  return active
+end
+
+function M.stop_all_sessions()
+  local active = M.get_active_sessions()
+  for _, bufnr in ipairs(active) do
+    lifecycle.stop(bufnr)
+  end
+  if M.config and M.config.show_notifications then
+    vim.notify("Stopped " .. #active .. " buffergolf sessions", vim.log.levels.INFO)
   end
 end
 

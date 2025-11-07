@@ -2,6 +2,35 @@ local buffer = require("buffergolf.session.buffer")
 
 local M = {}
 
+local function validate_window_config(config)
+  if not config then
+    return false, "No window config provided"
+  end
+
+  local position = config.position
+  if position and not vim.tbl_contains({ "left", "right", "top", "bottom" }, position) then
+    return false, "Invalid window position: " .. tostring(position)
+  end
+
+  local size = config.size
+  if size and (type(size) ~= "number" or size <= 0 or size > 100) then
+    return false, "Invalid window size: " .. tostring(size)
+  end
+
+  return true, nil
+end
+
+local function apply_border(win, border_style)
+  if not border_style or border_style == "none" then
+    return
+  end
+
+  pcall(vim.api.nvim_win_set_config, win, {
+    border = border_style,
+  })
+end
+
+-- Creates a split window to display the reference text in golf mode
 function M.create_reference_window(session)
   local ref_buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_name(ref_buf, buffer.generate_buffer_name(session.origin_buf, ".golf.ref"))
@@ -19,6 +48,12 @@ function M.create_reference_window(session)
 
   local ref_config = (session.config.windows and session.config.windows.reference) or {}
   local position, size = ref_config.position or "right", ref_config.size or 50
+  local border = ref_config.border or "none"
+
+  local is_valid, err = validate_window_config(ref_config)
+  if not is_valid then
+    vim.notify("Window config warning: " .. err, vim.log.levels.WARN)
+  end
 
   local split_cmds =
     { left = "leftabove vsplit", top = "leftabove split", bottom = "rightbelow split", right = "rightbelow vsplit" }
@@ -43,8 +78,26 @@ function M.create_reference_window(session)
   vim.api.nvim_set_current_win(session.practice_win)
   vim.api.nvim_win_set_cursor(session.practice_win, { 1, 0 })
 
+  apply_border(ref_win, border)
+
   session.reference_buf, session.reference_win = ref_buf, ref_win
   return ref_buf, ref_win
+end
+
+function M.update_reference_content(session, new_lines)
+  if not session or not session.reference_buf then
+    return false
+  end
+
+  if not buffer.buf_valid(session.reference_buf) then
+    return false
+  end
+
+  vim.api.nvim_set_option_value("modifiable", true, { buf = session.reference_buf })
+  vim.api.nvim_buf_set_lines(session.reference_buf, 0, -1, false, new_lines)
+  vim.api.nvim_set_option_value("modifiable", false, { buf = session.reference_buf })
+
+  return true
 end
 
 function M.setup_mini_diff(session)

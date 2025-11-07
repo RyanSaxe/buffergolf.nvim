@@ -5,8 +5,30 @@ local stats_display = require("buffergolf.timer.stats_display")
 
 local M = {}
 
+local active_timers = {}
+
 local function format_time(seconds)
   return string.format("%02d:%02d", math.floor(seconds / 60), seconds % 60)
+end
+
+local function register_timer(session, timer)
+  if session and session.practice_buf then
+    active_timers[session.practice_buf] = timer
+  end
+end
+
+local function unregister_timer(session)
+  if session and session.practice_buf then
+    active_timers[session.practice_buf] = nil
+  end
+end
+
+function M.get_active_timer_count()
+  local count = 0
+  for _ in pairs(active_timers) do
+    count = count + 1
+  end
+  return count
 end
 
 local function get_elapsed_seconds(session)
@@ -191,6 +213,7 @@ function M.init(session)
     return
   end
   session.timer_state.update_timer = timer
+  register_timer(session, timer)
   timer:start(
     250, -- initial delay in milliseconds
     250, -- repeat interval in milliseconds
@@ -223,8 +246,50 @@ function M.cleanup(session)
     session.timer_state.update_timer:close()
   end
 
+  unregister_timer(session)
   stats_display.close_stats_window(session)
   session.timer_state = nil
+end
+
+function M.pause_timer(session)
+  if not session or not session.timer_state or not session.timer_state.update_timer then
+    return false
+  end
+
+  if session.timer_state.update_timer:is_active() then
+    session.timer_state.update_timer:stop()
+    session.timer_state.paused = true
+    return true
+  end
+
+  return false
+end
+
+function M.resume_timer(session)
+  if not session or not session.timer_state or not session.timer_state.update_timer then
+    return false
+  end
+
+  if session.timer_state.paused then
+    session.timer_state.update_timer:start(
+      250,
+      250,
+      vim.schedule_wrap(function()
+        if
+          not session.timer_state
+          or not buffer.win_valid(session.practice_win)
+          or not buffer.buf_valid(session.practice_buf)
+        then
+          return
+        end
+        M.update_stats_float(session)
+      end)
+    )
+    session.timer_state.paused = false
+    return true
+  end
+
+  return false
 end
 
 return M

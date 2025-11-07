@@ -2,12 +2,29 @@ local disabled_plugins = require("buffergolf.disabled_plugins")
 
 local M = {}
 
+local buffer_stats = {}
+
 function M.buf_valid(bufnr)
   return type(bufnr) == "number" and vim.api.nvim_buf_is_valid(bufnr)
 end
 
 function M.win_valid(win)
   return type(win) == "number" and vim.api.nvim_win_is_valid(win)
+end
+
+function M.record_buffer_creation(bufnr, buffer_type)
+  buffer_stats[bufnr] = {
+    type = buffer_type,
+    created_at = os.time(),
+  }
+end
+
+function M.get_buffer_stats(bufnr)
+  return buffer_stats[bufnr]
+end
+
+function M.clear_buffer_stats(bufnr)
+  buffer_stats[bufnr] = nil
 end
 
 function M.copy_indent_options(origin, target)
@@ -165,6 +182,35 @@ end
 
 function M.prepare_lines(lines, _, config)
   return config.auto_dedent and M.dedent_lines(lines) or lines
+end
+
+function M.get_line_stats(lines)
+  local stats = {
+    total_lines = #lines,
+    empty_lines = 0,
+    total_chars = 0,
+    max_line_length = 0,
+    min_line_length = math.huge,
+  }
+
+  for _, line in ipairs(lines) do
+    if line == "" then
+      stats.empty_lines = stats.empty_lines + 1
+    end
+    stats.total_chars = stats.total_chars + #line
+    stats.max_line_length = math.max(stats.max_line_length, #line)
+    if #line > 0 then
+      stats.min_line_length = math.min(stats.min_line_length, #line)
+    end
+  end
+
+  if stats.min_line_length == math.huge then
+    stats.min_line_length = 0
+  end
+
+  stats.avg_line_length = stats.total_lines > 0 and (stats.total_chars / stats.total_lines) or 0
+
+  return stats
 end
 
 return M
